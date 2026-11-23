@@ -27,6 +27,12 @@
 - **Hinweise**: Nebel, Frost / Glätte, Tau, Sturm (Böen oder schneller Druckfall), Gewitterneigung, Hitze und UV – jeweils mit Stufe und den Werten dahinter
 - Optional die **Vorhersage einer Wetter-Entität** (z. B. DWD, Met.no): stündlich und täglich mit Temperatur, Niederschlag, Wahrscheinlichkeit und Wind
 
+**Pollen**
+- Funktioniert direkt mit **[DWD Pollenflug](https://github.com/mampfes/hacs_dwd_pollenflug)** (Sensoren werden automatisch gefunden); andere Quellen (Google Pollen UPI 0–5, Pollen/m³, Text-Stufen) werden auf dieselbe Skala 0–3 umgerechnet
+- Heute, morgen und übermorgen je Pollenart, Gesamtbelastung und Trend; **deine Allergene** werden hervorgehoben und bestimmen Gesamtbelastung, Übersicht und Hinweise
+- **Lokale Einschätzung aus deiner Station**: Regen wäscht Pollen aus, hohe Feuchte lässt sie absinken, trockener Wind verteilt sie – dazu ein Lüftungstipp für Stadt oder Land
+- **Pollen-Verlauf** als Heatmap (7–90 Tage)
+
 **Sonne**
 - **Sonnenbogen** des Tages mit aktuellem Sonnenstand, Auf- und Untergang, **Tageslänge inkl. Änderung zu gestern**, Sonnenhöchststand mit Höhe, aktuelle Höhe und Azimut (aus dem Standort von Home Assistant berechnet)
 - **UV**: Pyramide plus UV-Kurve des Tages in den WHO-Stufen, **UV-Tagesdosis** (SED) und **Zeit bis zum Sonnenbrand** für Hauttyp I–VI (dein Typ hervorgehoben)
@@ -61,16 +67,16 @@
 - Die letzte Auswahl wird je Diagramm gemerkt
 
 **Allgemein**
-- Reiter (*Jetzt · Prognose · Sonne · Wind · Regen · Jahr*)
+- Reiter (*Jetzt · Prognose · Sonne · Pollen · Wind · Regen · Jahr*) – der Pollen-Reiter erscheint nur, wenn es Pollen-Sensoren gibt
 - **Jede Option** ist im grafischen Editor einstellbar, inkl. Farben (Akzent, Wind, Böen, Zeiger) oder alles untereinander, jeder Bereich abschaltbar
 - Komplett im **grafischen Karten-Editor** einstellbar, Deutsch und Englisch, helles & dunkles Theme
 - Klick auf einen Wert öffnet den *Mehr-Infos*-Dialog von Home Assistant
 
 ## Screenshots
 
-| Jetzt | Prognose | Sonne | Wind | Regen | Jahr |
-|---|---|---|---|---|---|
-| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/forecast.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
+| Jetzt | Prognose | Sonne | Pollen | Wind | Regen | Jahr |
+|---|---|---|---|---|---|---|
+| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/forecast.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/pollen.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
 
 ## Installation
 
@@ -156,7 +162,7 @@ image_opacity: 0.55
 | Option | Standard | Beschreibung |
 |---|---|---|
 | `layout` | `tabs` | `tabs` (Reiter) oder `stack` (alles untereinander) |
-| `tabs` | `[now, forecast, sun, wind, rain, year]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
+| `tabs` | `[now, forecast, sun, pollen, wind, rain, year]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
 | `default_tab` | `now` | Start-Reiter |
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Einzelne Bereiche ein-/ausblenden |
 | `minmax_mode` | `24h` | Min/Max über die letzten 24 h oder `today` (seit Mitternacht) |
@@ -165,6 +171,12 @@ image_opacity: 0.55
 | `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, 1y]` | Zeitraum-Knöpfe von Wind & Böen |
 | `rain_periods` / `sun_periods` | `[7d, 14d, 30d, 1y, summer, winter]` | Zeitraum-Knöpfe von Niederschlag / Sonnenstunden |
 | `windrose_default`, `wind_chart_default`, `rain_default`, `sun_default` | `24h`, `24h`, `14d`, `14d` | Start-Zeitraum (die letzte Auswahl merkt sich der Browser) |
+| `pollen_entities` | auto | Pollen-Sensoren – leer = alle `sensor.pollenflug_*` (DWD Pollenflug) |
+| `pollen_allergies` | | Deine Allergene – hervorgehoben, bestimmen die Gesamtbelastung |
+| `pollen_scale` | `auto` | `auto`, `dwd` (0–3), `upi` (0–5), `ppm` (Pollen/m³) |
+| `pollen_area` | `city` | `city` (Stadt) oder `rural` (Land) – Lüftungstipp |
+| `pollen_history_days` | `30` | Tage in der Pollen-Heatmap (7–90) |
+| `pollen_auto`, `pollen_show_empty`, `show_pollen`, `show_pollen_history` | `true`, `false`, `true`, `true` | Automatisch finden, Pollen ohne Flug zeigen, Bereiche |
 | `weather_entity` | | Wetter-Entität, deren Vorhersage im Reiter *Prognose* erscheint |
 | `forecast_model` | `zambretti` | `zambretti` oder `simple` (nur Druck + Tendenz) |
 | `hemisphere` | `auto` | `auto` (aus Standort), `north`, `south` – für Zambretti |

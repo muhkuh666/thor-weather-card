@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.3.0";
+const CARD_VERSION = "1.4.0";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -51,7 +51,7 @@ const DEFAULTS = {
   show_header: true,
   layout: "tabs", // tabs | stack
   default_tab: "now", // now | wind | rain | year
-  tabs: ["now", "forecast", "sun", "wind", "rain", "year"],
+  tabs: ["now", "forecast", "sun", "pollen", "wind", "rain", "year"],
   language: "auto",
   // Bereiche
   show_hero: true,
@@ -90,6 +90,16 @@ const DEFAULTS = {
   show_rain_chart: true,
   show_climate_days: true,
   show_climate_chart: true,
+  // Pollen
+  pollen_entities: [],
+  pollen_auto: true,
+  pollen_allergies: [],
+  pollen_scale: "auto", // auto | dwd | upi | ppm
+  pollen_show_empty: false,
+  pollen_area: "city", // city | rural
+  pollen_history_days: 30,
+  show_pollen: true,
+  show_pollen_history: true,
   // Optionen
   minmax_mode: "24h", // 24h | today
   wind_unit: "auto", // auto | km/h | m/s | kn | mph | bft
@@ -118,7 +128,10 @@ const DEFAULTS = {
 
 const ENTITY_KEYS = Object.keys(DEFAULTS).filter((k) => k.endsWith("_entity"));
 const HIST_KEYS = ENTITY_KEYS.filter((k) => k !== "sun_entity");
-const ALL_TABS = ["now", "forecast", "sun", "wind", "rain", "year"];
+const ALL_TABS = ["now", "forecast", "sun", "pollen", "wind", "rain", "year"];
+// Pollen: DWD-Skala 0–3 in halben Stufen
+const POLLEN_COLORS = ["#4caf50", "#9ccc65", "#ffeb3b", "#ffc107", "#ff9800", "#f4511e", "#c62828"];
+const POLLEN_WORDS = { none: 0, keine: 0, kein: 0, "very low": 0.5, "sehr gering": 0.5, low: 1, gering: 1, niedrig: 1, moderate: 2, medium: 2, mittel: 2, "mäßig": 2, high: 3, hoch: 3, "very high": 3, "sehr hoch": 3 };
 const LUX_TO_WM2 = 0.0079; // Näherung Sonnenlicht: 1 W/m² ≈ 127 lx
 const MED = [200, 250, 300, 450, 600, 1000]; // minimale Erythemdosis J/m² je Hauttyp I–VI
 // Zeiträume wie bei der Helios Compass Card: kurz = Verlauf, ab 7 Tagen = Langzeitstatistik
@@ -148,11 +161,20 @@ const T = {
     fc_title: "Lokale Prognose", fc_model: "Modell", fc_next: "für die nächsten ~12 Stunden", fc_inputs: "Eingangswerte", season: "Jahreszeit", season_s: "Sommerhalbjahr", season_w: "Winterhalbjahr",
     wind_corr: "Windkorrektur", trend3h: "Tendenz 3 h", fc_need: "Für die Prognose wird ein Luftdruck-Sensor gebraucht.",
     press_chart: "Luftdruck – 24 h & Trend", press_extra: "Trend +6 h",
-    risks: "Hinweise", risk: { fog: "Nebel", frost: "Frost / Glätte", dew: "Tau", storm: "Sturm", heat: "Hitze", uv: "UV", thunder: "Gewitterneigung", none: "Keine Auffälligkeiten" },
+    risks: "Hinweise", risk: { pollen: "Pollen", fog: "Nebel", frost: "Frost / Glätte", dew: "Tau", storm: "Sturm", heat: "Hitze", uv: "UV", thunder: "Gewitterneigung", none: "Keine Auffälligkeiten" },
     lvl: ["gering", "möglich", "wahrscheinlich", "hoch"],
     wx_hourly: "Stündlich", wx_daily: "Täglich", wx_from: "Vorhersage von", wx_none: "Keine Vorhersage – Wetter-Entität im Editor wählen (z. B. DWD, Met.no).",
     rose_now: "Jetzt", rose_metric: { freq: "Häufigkeit", speed: "Geschwindigkeit", bft: "Stärke (Bft)" }, rose_avg_hint: "Ø je Richtung · Linie = Maximum · Deckkraft = Häufigkeit",
-    tabs: { now: "Jetzt", forecast: "Prognose", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr" },
+    pollen: "Pollenflug", pollen_hist: "Pollen-Verlauf", pollen_top: "Am stärksten", pollen_mine: "deine Allergene", pollen_free: "Heute und in den nächsten Tagen kein Pollenflug.",
+    pollen_none: "Keine Pollen-Sensoren gefunden – z. B. die Integration „DWD Pollenflug“ (HACS) installieren oder Sensoren im Editor wählen.",
+    pollen_src: "Quelle: Pollen-Sensoren (z. B. Deutscher Wetterdienst), Einschätzung aus deinen Wetterdaten.",
+    pollen_lvl: ["keine", "keine bis gering", "gering", "gering bis mittel", "mittel", "mittel bis hoch", "hoch"],
+    today_cap: "Heute", tomorrow: "Morgen", in2days: "Übermorgen",
+    pw: { title: "Lokale Einschätzung", rain_now: "Es regnet – Regen wäscht Pollen aus der Luft, gerade weniger Belastung.", rain_today: "Heute {mm} mm Regen – die Luft ist pollenärmer.",
+      humid: "Hohe Luftfeuchte – Pollen werden schwer und sinken ab.", dry_wind: "Trocken und windig – Pollen werden weit verteilt, Belastung eher höher.", wind: "Kräftiger Wind verteilt Pollen stärker.",
+      cold: "Kühle Luft – Pflanzen geben wenig Pollen ab.", air_city: "Lüften in der Stadt am besten früh morgens (ca. 6–8 Uhr).", air_rural: "Lüften auf dem Land am besten abends (ca. 19–24 Uhr).",
+      trend_up: "Morgen wird es stärker.", trend_down: "Morgen wird es schwächer.", trend_same: "Morgen ähnlich wie heute." },
+    tabs: { now: "Jetzt", forecast: "Prognose", sun: "Sonne", pollen: "Pollen", wind: "Wind", rain: "Regen", year: "Jahr" },
     sunrise: "Aufgang", sunset: "Untergang", daylength: "Tageslänge", noon: "Sonnenhöchststand", elevation: "Höhe", azimuth: "Azimut",
     vs_yesterday: "zu gestern", below_horizon: "Nacht", next_rise: "Nächster Aufgang",
     uv_curve: "UV heute", uv_dose: "UV-Dosis heute", sed: "SED", burn: "Sonnenbrand nach (ungeschützt)", skin: "Hauttyp", no_burn: "kein Risiko",
@@ -205,11 +227,20 @@ const T = {
     fc_title: "Local forecast", fc_model: "Model", fc_next: "for the next ~12 hours", fc_inputs: "Inputs", season: "Season", season_s: "summer half", season_w: "winter half",
     wind_corr: "Wind correction", trend3h: "Trend 3 h", fc_need: "The forecast needs a pressure sensor.",
     press_chart: "Pressure – 24 h & trend", press_extra: "trend +6 h",
-    risks: "Alerts", risk: { fog: "Fog", frost: "Frost / ice", dew: "Dew", storm: "Storm", heat: "Heat", uv: "UV", thunder: "Thunderstorm tendency", none: "Nothing notable" },
+    risks: "Alerts", risk: { pollen: "Pollen", fog: "Fog", frost: "Frost / ice", dew: "Dew", storm: "Storm", heat: "Heat", uv: "UV", thunder: "Thunderstorm tendency", none: "Nothing notable" },
     lvl: ["low", "possible", "likely", "high"],
     wx_hourly: "Hourly", wx_daily: "Daily", wx_from: "Forecast from", wx_none: "No forecast – pick a weather entity in the editor (e.g. Met.no).",
     rose_now: "Now", rose_metric: { freq: "Frequency", speed: "Speed", bft: "Force (Bft)" }, rose_avg_hint: "Ø per direction · line = maximum · opacity = frequency",
-    tabs: { now: "Now", forecast: "Forecast", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year" },
+    pollen: "Pollen", pollen_hist: "Pollen history", pollen_top: "Strongest", pollen_mine: "your allergens", pollen_free: "No pollen today or in the next days.",
+    pollen_none: "No pollen sensors found – e.g. install the \"DWD Pollenflug\" integration (HACS) or pick sensors in the editor.",
+    pollen_src: "Source: pollen sensors (e.g. German Weather Service), assessment from your weather data.",
+    pollen_lvl: ["none", "none to low", "low", "low to moderate", "moderate", "moderate to high", "high"],
+    today_cap: "Today", tomorrow: "Tomorrow", in2days: "Day after",
+    pw: { title: "Local assessment", rain_now: "It is raining – rain washes pollen out of the air, lower exposure right now.", rain_today: "{mm} mm of rain today – the air holds less pollen.",
+      humid: "High humidity – pollen gets heavy and settles.", dry_wind: "Dry and windy – pollen spreads widely, exposure rather higher.", wind: "Strong wind spreads pollen further.",
+      cold: "Cool air – plants release little pollen.", air_city: "In town, air rooms early in the morning (about 6–8 am).", air_rural: "In the countryside, air rooms in the evening (about 7 pm–midnight).",
+      trend_up: "Tomorrow gets stronger.", trend_down: "Tomorrow gets weaker.", trend_same: "Tomorrow similar to today." },
+    tabs: { now: "Now", forecast: "Forecast", sun: "Sun", pollen: "Pollen", wind: "Wind", rain: "Rain", year: "Year" },
     sunrise: "Sunrise", sunset: "Sunset", daylength: "Day length", noon: "Solar noon", elevation: "Elevation", azimuth: "Azimuth",
     vs_yesterday: "vs. yesterday", below_horizon: "night", next_rise: "Next sunrise",
     uv_curve: "UV today", uv_dose: "UV dose today", sed: "SED", burn: "Sunburn after (unprotected)", skin: "Skin type", no_burn: "no risk",
@@ -647,6 +678,8 @@ class ThorWeatherCard extends HTMLElement {
       this._roseMetric = c.show_rose_metric_switch && ["freq", "speed", "bft"].includes(m) ? m : ["freq", "speed", "bft"].includes(c.windrose_metric) ? c.windrose_metric : "freq";
     }
     for (const k of COLOR_KEYS) if (!hexToRgb(c[k])) c[k] = DEFAULTS[k];
+    for (const k of ["pollen_entities", "pollen_allergies"]) c[k] = Array.isArray(c[k]) ? c[k].filter(Boolean) : c[k] ? [c[k]] : [];
+    c.pollen_history_days = clamp(Math.round(num(c.pollen_history_days) || 30), 7, 90);
     c.forecast_hours = clamp(Math.round(num(c.forecast_hours) || 12), 4, 48);
     c.forecast_days = clamp(Math.round(num(c.forecast_days) || 7), 2, 14);
     const entChanged = !old || ENTITY_KEYS.some((k) => old[k] !== c[k]);
@@ -681,6 +714,10 @@ class ThorWeatherCard extends HTMLElement {
         this._lastStates[id] = st;
         changed = true;
       }
+    }
+    for (const id of this._pollenIds()) {
+      const st = hass.states[id];
+      if (st !== this._lastStates[id]) { this._lastStates[id] = st; changed = true; }
     }
     if (changed) this._queueRender();
   }
@@ -969,6 +1006,15 @@ class ThorWeatherCard extends HTMLElement {
         hist[k] = this._points(raw, k);
       }
       this._hist = hist;
+      const pIds = c.show_pollen_history && c.tabs.includes("pollen") ? this._pollenIds() : [];
+      if (pIds.length) {
+        try {
+          const ph = await this._history(pIds, now - c.pollen_history_days * DAY, now);
+          const out = {};
+          for (const id of pIds) out[id] = (ph?.[id] || []).map((p) => ({ t: (p.lu ?? p.lc ?? Date.parse(p.last_updated || p.last_changed) / 1000) * 1000, v: this._pollenLevel(p.s ?? p.state, this._hass.states[id]) })).filter((p) => ok(p.t)).sort((a, b) => a.t - b.t);
+          this._pollenHist = out;
+        } catch (e) { /* ohne Verlauf */ }
+      }
       if (now - this._lastStats > HOUR || !this._daily) await this._fetchStats(token);
     } catch (e) {
       // Verlauf nicht verfügbar – Karte zeigt Live-Werte
@@ -1187,8 +1233,10 @@ class ThorWeatherCard extends HTMLElement {
     else if (c.layout === "stack") body = c.tabs.map((tab) => this._tabBody(tab)).join("");
     else body = this._tabBody(this._tab);
 
-    const tabs = c.layout === "tabs" && c.tabs.length > 1 && hasAny
-      ? `<div class="tabs" role="tablist">${c.tabs.map((k) => `<button class="tab ${k === this._tab ? "on" : ""}" data-tab="${k}" role="tab">${esc(t.tabs[k])}</button>`).join("")}</div>`
+    const tabList = !this._hass ? c.tabs : c.tabs.filter((k) => k !== "pollen" || this._pollenIds().length || (c.pollen_entities || []).length);
+    if (this._hass && !tabList.includes(this._tab) && tabList.length) this._tab = tabList[0];
+    const tabs = c.layout === "tabs" && tabList.length > 1 && hasAny
+      ? `<div class="tabs" role="tablist">${tabList.map((k) => `<button class="tab ${k === this._tab ? "on" : ""}" data-tab="${k}" role="tab">${esc(t.tabs[k])}</button>`).join("")}</div>`
       : "";
     const header = c.show_header && (c.title || c.icon)
       ? `<div class="head">${c.icon ? `<ha-icon icon="${esc(c.icon)}"></ha-icon>` : ""}<span class="title">${esc(c.title)}</span>${this._loading && !this._daily ? `<span class="muted small">${esc(t.loading)}</span>` : ""}</div>`
@@ -1218,6 +1266,9 @@ class ThorWeatherCard extends HTMLElement {
       this._roseMode = b.dataset.rmode;
       this._render();
     }));
+    this.shadowRoot.querySelectorAll("[data-pollen]").forEach((el) => el.addEventListener("click", () => {
+      this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: el.dataset.pollen }, bubbles: true, composed: true }));
+    }));
     this.shadowRoot.querySelectorAll("[data-more]").forEach((el) => el.addEventListener("click", () => {
       const id = c[el.dataset.more];
       if (id) this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: id }, bubbles: true, composed: true }));
@@ -1239,6 +1290,9 @@ class ThorWeatherCard extends HTMLElement {
       if (c.show_pressure_chart && c.pressure_entity) parts.push(this._pressureChart());
       if (c.show_risks) parts.push(this._risks());
       if (c.show_weather_forecast) parts.push(this._weatherForecast());
+    } else if (tab === "pollen") {
+      if (c.show_pollen) parts.push(this._pollen());
+      if (c.show_pollen_history) parts.push(this._pollenHistory());
     } else if (tab === "sun") {
       if (c.show_sun_arc) parts.push(this._sunArc());
       if (c.show_sun_uv && c.uv_entity) parts.push(this._uvSun());
@@ -1301,6 +1355,12 @@ class ThorWeatherCard extends HTMLElement {
     if (ok(rt)) chips.push(this._chip("mdi:weather-rainy", `${t.rain} ${t.today}`, `${this._fmt(rt)} ${this._rainUnit()}`, c.rain_today_entity ? "rain_today_entity" : "rain_total_entity"));
     const uv = this._val("uv_entity");
     if (ok(uv)) chips.push(this._chip("mdi:sun-wireless", t.uv, `${this._fmt(uv, 0)} · ${t.uv_risk[this._uvLevel(uv)]}`, "uv_entity"));
+    if (c.show_pollen && c.tabs.includes("pollen")) {
+      const pd = this._pollenData();
+      const base = pd.some((d) => d.mine) ? pd.filter((d) => d.mine) : pd;
+      const mx = base.filter((d) => ok(d.today)).sort((a, b) => b.today - a.today)[0];
+      if (mx) chips.push(this._chip("mdi:flower-pollen", t.pollen, mx.today > 0 ? `${this._pollenDesc(mx.today)} · ${mx.name}` : this._pollenDesc(0)));
+    }
 
     return `<div class="hero">
       <div class="hero-main" data-more="outdoor_temp_entity">
@@ -1679,6 +1739,12 @@ class ThorWeatherCard extends HTMLElement {
     const feels = this._config.feels_like_entity ? this._toC(this._val("feels_like_entity"), "feels_like_entity") : feelsLikeC(T0, rh, kmh);
     if (ok(feels) && feels >= 27) add("heat", feels >= 38 ? 3 : feels >= 32 ? 2 : 1, "mdi:thermometer-alert", `${t.feels} ${this._fmt(this._fromC(feels), 1)} ${unit}`);
     const uv = this._val("uv_entity");
+    {
+      const pd = this._pollenData();
+      const base = pd.some((d) => d.mine) ? pd.filter((d) => d.mine) : pd;
+      const hi = base.filter((d) => ok(d.today) && d.today >= 1.5).sort((a, b) => b.today - a.today);
+      if (hi.length) add("pollen", hi[0].today >= 3 ? 3 : hi[0].today >= 2 ? 2 : 1, "mdi:flower-pollen", hi.slice(0, 3).map((d) => `${d.name} ${this._pollenDesc(d.today)}`).join(" · "));
+    }
     if (ok(uv) && uv >= 6) add("uv", uv >= 11 ? 3 : uv >= 8 ? 2 : 1, "mdi:sun-wireless", `UV ${this._fmt(uv, 1)}`);
     const cols = ["#94a3b8", "#eab308", "#f97316", "#dc2626"];
     const body = items.length
@@ -1714,6 +1780,162 @@ class ThorWeatherCard extends HTMLElement {
       ${h ? `<div class="panel-t small">${esc(t.wx_hourly)}</div><div class="wxrow">${h}</div>` : ""}
       ${d ? `<div class="panel-t small" style="margin-top:6px">${esc(t.wx_daily)}</div><div class="wxrow">${d}</div>` : ""}
     </div>`;
+  }
+
+  /* -------------------------------------------------------------- Pollen */
+
+  /** Pollen-Sensoren: konfiguriert oder automatisch (DWD Pollenflug: sensor.pollenflug_*) */
+  _pollenIds() {
+    const c = this._config;
+    if (Array.isArray(c.pollen_entities) && c.pollen_entities.length) return c.pollen_entities.filter((id) => this._hass?.states?.[id]);
+    if (!c.pollen_auto) return [];
+    return Object.keys(this._hass?.states || {}).filter((id) => /^sensor\.pollenflug_/.test(id)).sort();
+  }
+
+  /** Wert auf DWD-Skala 0–3 (halbe Stufen) bringen */
+  _pollenLevel(v, st) {
+    if (v === undefined || v === null || v === "" || v === "unknown" || v === "unavailable") return NaN;
+    const s = String(v).trim().toLowerCase();
+    if (s in POLLEN_WORDS) return POLLEN_WORDS[s];
+    const m = /^(\d(?:[.,]\d)?)\s*-\s*(\d(?:[.,]\d)?)$/.exec(s); // „1-2“ → 1,5
+    if (m) return (num(m[1]) + num(m[2])) / 2;
+    const n = num(s);
+    if (!ok(n)) return NaN;
+    let scale = this._config.pollen_scale;
+    if (scale === "auto") {
+      const u = (st?.attributes?.unit_of_measurement || "").toLowerCase();
+      scale = /upi|index/.test(u) || n > 3 ? (n > 5 ? "ppm" : "upi") : "dwd";
+    }
+    if (scale === "upi") return clamp(Math.round(((n * 3) / 5) * 2) / 2, 0, 3); // Google UPI 0–5
+    if (scale === "ppm") return n < 10 ? 0.5 : n < 50 ? 1 : n < 200 ? 2 : 3; // grobe Stückzahl-Klassen
+    return clamp(Math.round(n * 2) / 2, 0, 3);
+  }
+
+  _pollenName(id) {
+    const st = this._hass?.states?.[id];
+    let n = st?.attributes?.friendly_name || id.replace(/^sensor\./, "");
+    n = n.replace(/^pollenflug[\s_:-]*/i, "").replace(/[\s_]+\d+$/, "").replace(/_/g, " ").trim();
+    return n.charAt(0).toUpperCase() + n.slice(1);
+  }
+
+  _pollenIcon(name) {
+    const n = name.toLowerCase();
+    if (/birke|erle|hasel|esche|eiche|buche|pappel|ulme|weide|platane|baum|tree|birch|alder|hazel|ash|oak|olive|cypress|zypresse/.test(n)) return "mdi:tree";
+    if (/gr[aä]s|graeser|roggen|rye|grass/.test(n)) return "mdi:grass";
+    return "mdi:flower-pollen";
+  }
+
+  _pollenData() {
+    return this._pollenIds().map((id) => {
+      const st = this._hass.states[id];
+      const a = st.attributes || {};
+      const name = this._pollenName(id);
+      const today = this._pollenLevel(st.state, st);
+      const tomorrow = this._pollenLevel(a.state_tomorrow ?? a.tomorrow ?? a.forecast_tomorrow, st);
+      const in2 = this._pollenLevel(a.state_in_2_days ?? a.day_after_tomorrow ?? a.state_day_after_tomorrow, st);
+      const mine = (this._config.pollen_allergies || []).includes(id);
+      return { id, name, icon: this._pollenIcon(name), today, tomorrow, in2, mine, max: Math.max(...[today, tomorrow, in2].filter(ok), -1) };
+    });
+  }
+
+  _pollenDesc(v) {
+    if (!ok(v)) return "–";
+    return this._t.pollen_lvl[Math.round(v * 2)] || "–";
+  }
+
+  _pollenChip(v, small) {
+    if (!ok(v)) return `<span class="pl na">–</span>`;
+    const i = Math.round(v * 2);
+    return `<span class="pl ${small ? "s" : ""}" style="background:${POLLEN_COLORS[i]};color:${i >= 5 ? "#fff" : "#222"}" title="${esc(this._pollenDesc(v))}">${small ? "" : esc(this._pollenDesc(v))}</span>`;
+  }
+
+  /** Lokale Einschätzung aus Wetterdaten: Regen wäscht aus, Wind und Trockenheit verstärken */
+  _pollenWeather() {
+    const t = this._t;
+    const notes = [];
+    const rh = this._val("humidity_entity");
+    const kmh = this._kmh("wind_speed_entity");
+    const T0 = this._toC(this._val("outdoor_temp_entity"));
+    const rt = this._rainToday();
+    if (this._isRaining()) notes.push(["mdi:weather-pouring", t.pw.rain_now, -1]);
+    else if (ok(rt) && rt >= 2) notes.push(["mdi:weather-rainy", t.pw.rain_today.replace("{mm}", this._fmt(rt, 1)), -1]);
+    if (ok(rh) && rh >= 85) notes.push(["mdi:water-percent", t.pw.humid, -1]);
+    if (ok(rh) && rh < 55 && ok(kmh) && kmh >= 15 && (!ok(T0) || T0 >= 10)) notes.push(["mdi:weather-windy", t.pw.dry_wind, 1]);
+    else if (ok(kmh) && kmh >= 20) notes.push(["mdi:weather-windy", t.pw.wind, 1]);
+    if (ok(T0) && T0 < 5) notes.push(["mdi:snowflake", t.pw.cold, -1]);
+    return notes;
+  }
+
+  _pollen() {
+    const c = this._config;
+    const t = this._t;
+    const data = this._pollenData();
+    if (!data.length) return `<div class="panel"><div class="panel-t">${esc(t.pollen)}</div><div class="empty small">${esc(t.pollen_none)}</div></div>`;
+    const base = data.some((d) => d.mine) ? data.filter((d) => d.mine) : data;
+    const dayMax = (k) => { const v = base.map((d) => d[k]).filter(ok); return v.length ? Math.max(...v) : NaN; };
+    const days = [["today", t.today_cap], ["tomorrow", t.tomorrow], ["in2", t.in2days]];
+    const top = base.filter((d) => ok(d.today) && d.today > 0).sort((a, b) => b.today - a.today).slice(0, 3);
+    const summary = days.map(([k, l]) => {
+      const v = Math.max(...base.map((d) => d[k]).filter(ok));
+      const vv = ok(v) && v >= 0 ? v : NaN;
+      return `<div class="psum"><div class="small muted">${esc(l)}</div>${this._pollenChip(vv)}</div>`;
+    }).join("");
+    let rows = data.slice();
+    if (!c.pollen_show_empty) rows = rows.filter((d) => d.max > 0 || d.mine);
+    rows.sort((a, b) => (b.mine - a.mine) || (b.today || 0) - (a.today || 0) || (b.max - a.max) || a.name.localeCompare(b.name));
+    const table = rows.length
+      ? `<div class="ptable"><div class="prow ph"><span></span><span></span>${days.map(([, l]) => `<span class="small muted">${esc(l)}</span>`).join("")}</div>
+        ${rows.map((d) => `<div class="prow ${d.mine ? "mine" : ""}" data-pollen="${esc(d.id)}">
+          <ha-icon icon="${d.icon}"></ha-icon><span class="pn">${esc(d.name)}${d.mine ? " ★" : ""}</span>
+          ${this._pollenChip(d.today)}${this._pollenChip(d.tomorrow)}${this._pollenChip(d.in2)}
+        </div>`).join("")}</div>`
+      : `<div class="small muted">${esc(t.pollen_free)}</div>`;
+    const notes = this._pollenWeather();
+    const tip = c.pollen_area === "rural" ? t.pw.air_rural : t.pw.air_city;
+    const trendTxt = (() => {
+      const a = dayMax("today"), b = dayMax("tomorrow");
+      if (!ok(a) || !ok(b)) return "";
+      return b > a ? t.pw.trend_up : b < a ? t.pw.trend_down : t.pw.trend_same;
+    })();
+    return `<div class="panel">
+      <div class="panel-t row"><span>${esc(t.pollen)}${data.some((d) => d.mine) ? ` <span class="small muted">· ${esc(t.pollen_mine)}</span>` : ""}</span>${top.length ? `<span class="small muted">${esc(t.pollen_top)}: <b>${top.map((d) => esc(d.name)).join(", ")}</b></span>` : ""}</div>
+      <div class="psums">${summary}</div>
+      ${trendTxt ? `<div class="small center" style="margin:4px 0 8px">${esc(trendTxt)}</div>` : ""}
+      ${table}
+      <div class="panel-t small" style="margin-top:10px">${esc(t.pw.title)}</div>
+      <div class="pnotes">${notes.map(([i, txt, eff]) => `<div class="pnote ${eff > 0 ? "up" : "down"}"><ha-icon icon="${i}"></ha-icon><span>${esc(txt)}</span></div>`).join("")}
+        <div class="pnote"><ha-icon icon="mdi:window-open-variant"></ha-icon><span>${esc(tip)}</span></div></div>
+      <div class="small muted" style="margin-top:6px">${esc(t.pollen_src)}</div>
+    </div>`;
+  }
+
+  /** Verlauf der letzten Wochen als Heatmap (Pollenart × Tag) */
+  _pollenHistory() {
+    const t = this._t;
+    const data = this._pollenData().filter((d) => d.max > 0 || d.mine || this._config.pollen_show_empty);
+    const days = this._config.pollen_history_days;
+    if (!data.length || !this._pollenHist) return "";
+    const today = new Date().setHours(0, 0, 0, 0);
+    const cols = [];
+    for (let i = days - 1; i >= 0; i--) cols.push(new Date(today - i * DAY + 12 * HOUR).setHours(0, 0, 0, 0));
+    const rows = data.map((d) => {
+      const pts = this._pollenHist[d.id] || [];
+      const cells = cols.map((day) => {
+        let mx = NaN;
+        const v0 = valueAt(pts, day);
+        if (ok(v0)) mx = v0;
+        for (const p of pts) if (p.t >= day && p.t < day + DAY && ok(p.v)) mx = ok(mx) ? Math.max(mx, p.v) : p.v;
+        if (day === today && ok(d.today)) mx = d.today;
+        const i = ok(mx) ? Math.round(mx * 2) : -1;
+        return `<span class="hm" style="background:${i >= 0 ? POLLEN_COLORS[i] : "var(--thor-off)"}" title="${esc(d.name)} · ${this._date(day)}: ${esc(this._pollenDesc(mx))}"></span>`;
+      }).join("");
+      return `<div class="hrow"><span class="pn small">${esc(d.name)}</span><div class="hcells" style="grid-template-columns:repeat(${days},1fr)">${cells}</div></div>`;
+    }).join("");
+    const lbl = [0, Math.floor(days / 2), days - 1].map((i) => `<span>${this._date(cols[i])}</span>`).join("");
+    const legend = [0, 2, 4, 6].map((i) => `<span><i style="background:${POLLEN_COLORS[i]}"></i>${esc(t.pollen_lvl[i])}</span>`).join("");
+    return `<div class="panel"><div class="panel-t">${esc(t.pollen_hist)} · ${days} ${this._lang === "de" ? "Tage" : "days"}</div>
+      <div class="hmap">${rows}<div class="hrow"><span></span><div class="hlbl small muted">${lbl}</div></div></div>
+      <div class="legend center small">${legend}</div></div>`;
   }
 
   /* --------------------------------------------------------------- Sonne */
@@ -2775,6 +2997,26 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .rnow { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 14px; font-size:.85em; margin-bottom:4px; }
 .rnow ha-icon { --mdc-icon-size: 16px; color: var(--thor-blue); vertical-align:-3px; margin-right:3px; }
 .rnow i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
+/* Pollen */
+.psums { display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; }
+.psum { text-align:center; display:flex; flex-direction:column; gap:3px; align-items:stretch; }
+.pl { display:inline-block; border-radius:6px; padding:3px 6px; font-size:.78em; font-weight:600; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pl.na { background: var(--thor-off); color: var(--secondary-text-color); }
+.ptable { display:flex; flex-direction:column; gap:3px; margin-top:4px; }
+.prow { display:grid; grid-template-columns: 22px minmax(70px, 1.1fr) 1fr 1fr 1fr; gap:5px; align-items:center; cursor:pointer; padding:2px 0; }
+.prow.ph { cursor:default; }
+.prow ha-icon { --mdc-icon-size: 18px; color: #7cb342; }
+.prow.mine .pn { font-weight:700; }
+.pn { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.9em; }
+.pnotes { display:flex; flex-direction:column; gap:4px; }
+.pnote { display:flex; gap:8px; align-items:center; font-size:.86em; padding:4px 8px; border-radius:8px; background: var(--secondary-background-color, rgba(127,127,127,.08)); }
+.pnote ha-icon { --mdc-icon-size: 18px; color: var(--thor-blue); flex:none; }
+.pnote.up ha-icon { color: #f97316; } .pnote.down ha-icon { color: #2e9d5b; }
+.hmap { display:flex; flex-direction:column; gap:2px; }
+.hrow { display:grid; grid-template-columns: 80px 1fr; gap:6px; align-items:center; }
+.hcells { display:grid; gap:1px; }
+.hm { height:12px; border-radius:2px; }
+.hlbl { display:flex; justify-content:space-between; }
 /* Sonne */
 .sunarc { width:100%; height:auto; display:block; }
 .sunglow { filter: drop-shadow(0 0 5px rgba(251,191,36,.9)); }
@@ -2816,6 +3058,8 @@ const ED = {
       show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", windrose_metric: "Windrose: Darstellung", show_rose_metric_switch: "Windrose: Umschalter Häufigkeit/Geschw./Stärke", show_rose_now: "Windrose: aktueller Wind",
       weather_entity: "Wetter-Entität (Vorhersage)", forecast_model: "Prognosemodell", hemisphere: "Halbkugel", forecast_hours: "Stunden in der Vorhersage", forecast_days: "Tage in der Vorhersage",
       show_zambretti: "Lokale Prognose (Zambretti)", show_pressure_chart: "Luftdruck-Trend", show_risks: "Hinweise (Nebel, Frost, Sturm …)", show_weather_forecast: "Vorhersage der Wetter-Entität",
+      pollen_entities: "Pollen-Sensoren", pollen_allergies: "Deine Allergene (hervorheben)", pollen_scale: "Skala der Sensoren", pollen_area: "Wohnlage (Lüftungstipp)",
+      pollen_history_days: "Pollen-Verlauf", pollen_auto: "DWD-Pollenflug automatisch finden", pollen_show_empty: "Pollen ohne Flug zeigen", show_pollen: "Pollenflug", show_pollen_history: "Pollen-Verlauf (Heatmap)",
       accent_color: "Akzent", wind_color: "Wind", gust_color: "Böen", needle_color: "Zeiger", show_gust_chart: "Wind & Böen – Verlauf", windrose_mode: "Windrose zeigt",
       show_rain: "Regen-Status & Summen", show_rain_chart: "Regen je Tag", show_climate_days: "Klimatage", show_climate_chart: "Klimadiagramm",
       minmax_mode: "Min/Max-Zeitraum", wind_unit: "Windeinheit", windrose_periods: "Zeiträume Windrose", windrose_default: "Windrose: Start",
@@ -2842,6 +3086,8 @@ const ED = {
       pressure_offset: "Wird zum Messwert addiert (z. B. für Höhenkorrektur).",
       image_rotation: "Positiv = im Uhrzeigersinn. Tipp: In Google Maps ist Norden oben – so soll dein Haus liegen.",
       tabs: "Bei „Untereinander“ werden diese Abschnitte nacheinander gezeigt.",
+      pollen_entities: "Leer = alle Sensoren der Integration „DWD Pollenflug“ (sensor.pollenflug_…) automatisch.",
+      pollen_allergies: "Diese Pollen stehen oben, sind fett und bestimmen die Gesamtbelastung und die Hinweise.",
       forecast_model: "Zambretti: klassisches Barometer-Modell aus Luftdruck, 3-h-Tendenz, Windrichtung und Jahreszeit – am besten für die nächsten 12 h.",
       weather_entity: "Optional – zeigt zusätzlich die Vorhersage z. B. von DWD oder Met.no.",
       radiation_entity: "Globalstrahlung in W/m² – ein Lux-Sensor geht auch (genähert umgerechnet).",
@@ -2849,9 +3095,10 @@ const ED = {
       sunshine_threshold: "WMO: Sonnenschein ab 120 W/m².",
       skin_type: "Für die Sonnenbrandzeit (Fitzpatrick I–VI).",
     },
-    sections: { forecast: "Prognose", colors: "Farben", windavg: "Wind-Mittelwerte der Station (optional)", temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
+    sections: { pollen: "Pollenflug", forecast: "Prognose", colors: "Farben", windavg: "Wind-Mittelwerte der Station (optional)", temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
     opts: {
       tabs: "Reiter", stack: "Untereinander", now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr",
+      p_ppm: "Pollen/m³", p_city: "Stadt", p_rural: "Land", pollen: "Pollen",
       wind_m: "Mittelwind", gust_m: "Böen", m_freq: "Häufigkeit", m_speed: "Geschwindigkeit", m_bft: "Stärke (Beaufort)", forecast: "Prognose",
       simple: "Einfach (Druck + Tendenz)", auto_loc: "Automatisch (Standort)", north: "Nordhalbkugel", south: "Südhalbkugel",
       skins: ["I – sehr hell", "II – hell", "III – mittel", "IV – oliv", "V – braun", "VI – dunkel"],
@@ -2875,6 +3122,8 @@ const ED = {
       show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", windrose_metric: "Wind rose: display", show_rose_metric_switch: "Wind rose: frequency/speed/force switch", show_rose_now: "Wind rose: current wind",
       weather_entity: "Weather entity (forecast)", forecast_model: "Forecast model", hemisphere: "Hemisphere", forecast_hours: "Hours in forecast", forecast_days: "Days in forecast",
       show_zambretti: "Local forecast (Zambretti)", show_pressure_chart: "Pressure trend", show_risks: "Alerts (fog, frost, storm …)", show_weather_forecast: "Weather entity forecast",
+      pollen_entities: "Pollen sensors", pollen_allergies: "Your allergens (highlight)", pollen_scale: "Sensor scale", pollen_area: "Area (airing tip)",
+      pollen_history_days: "Pollen history", pollen_auto: "Find DWD Pollenflug automatically", pollen_show_empty: "Show pollen without flight", show_pollen: "Pollen", show_pollen_history: "Pollen history (heatmap)",
       accent_color: "Accent", wind_color: "Wind", gust_color: "Gusts", needle_color: "Needle", show_gust_chart: "Wind & gusts – history", windrose_mode: "Wind rose shows",
       show_rain: "Rain state & totals", show_rain_chart: "Rain per day", show_climate_days: "Climate days", show_climate_chart: "Climate chart",
       minmax_mode: "Min/max period", wind_unit: "Wind unit", windrose_periods: "Wind rose periods", windrose_default: "Wind rose: start",
@@ -2901,6 +3150,8 @@ const ED = {
       pressure_offset: "Added to the reading (e.g. altitude correction).",
       image_rotation: "Positive = clockwise. Tip: in Google Maps north is up – that is how your house should be aligned.",
       tabs: "With \"stacked\" these sections are shown one after another.",
+      pollen_entities: "Empty = all sensors of the \"DWD Pollenflug\" integration (sensor.pollenflug_…) automatically.",
+      pollen_allergies: "These are listed first, in bold, and drive the overall level and alerts.",
       forecast_model: "Zambretti: classic barometer model from pressure, 3 h trend, wind direction and season – best for the next 12 h.",
       weather_entity: "Optional – additionally shows the forecast of e.g. Met.no.",
       radiation_entity: "Global radiation in W/m² – a lux sensor works too (approximated).",
@@ -2908,9 +3159,10 @@ const ED = {
       sunshine_threshold: "WMO: sunshine from 120 W/m².",
       skin_type: "For the sunburn time (Fitzpatrick I–VI).",
     },
-    sections: { forecast: "Forecast", colors: "Colors", windavg: "Station wind means (optional)", temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
+    sections: { pollen: "Pollen", forecast: "Forecast", colors: "Colors", windavg: "Station wind means (optional)", temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
     opts: {
       tabs: "Tabs", stack: "Stacked", now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year",
+      p_ppm: "Grains/m³", p_city: "Town", p_rural: "Countryside", pollen: "Pollen",
       wind_m: "Mean wind", gust_m: "Gusts", m_freq: "Frequency", m_speed: "Speed", m_bft: "Force (Beaufort)", forecast: "Forecast",
       simple: "Simple (pressure + trend)", auto_loc: "Automatic (location)", north: "Northern hemisphere", south: "Southern hemisphere",
       skins: ["I – very fair", "II – fair", "III – medium", "IV – olive", "V – brown", "VI – dark"],
@@ -2994,6 +3246,19 @@ class ThorWeatherCardEditor extends HTMLElement {
         grid([
           { name: "show_zambretti", selector: bool }, { name: "show_pressure_chart", selector: bool },
           { name: "show_risks", selector: bool }, { name: "show_weather_forecast", selector: bool },
+        ]),
+      ]),
+      sec("pollen", "mdi:flower-pollen", [
+        { name: "pollen_entities", selector: { entity: { domain: "sensor", multiple: true } } },
+        { name: "pollen_allergies", selector: { entity: { domain: "sensor", multiple: true } } },
+        grid([
+          { name: "pollen_scale", selector: sel([["auto", o.auto], ["dwd", "DWD 0–3"], ["upi", "Google UPI 0–5"], ["ppm", o.p_ppm]]) },
+          { name: "pollen_area", selector: sel([["city", o.p_city], ["rural", o.p_rural]]) },
+          { name: "pollen_history_days", selector: n(7, 90, 1, this._l() === ED.de ? "Tage" : "days") },
+          { name: "pollen_auto", selector: bool },
+          { name: "pollen_show_empty", selector: bool },
+          { name: "show_pollen", selector: bool },
+          { name: "show_pollen_history", selector: bool },
         ]),
       ]),
       sec("view", "mdi:page-layout-header", [
