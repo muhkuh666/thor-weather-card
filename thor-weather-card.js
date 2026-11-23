@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.2.0";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -27,6 +27,19 @@ const DEFAULTS = {
   rain_total_entity: "",
   rain_today_entity: "",
   rain_state_entity: "",
+  rain_event_entity: "",
+  rain_week_entity: "",
+  rain_month_entity: "",
+  rain_year_entity: "",
+  // fertige Mittelwerte der Station (optional, haben Vorrang)
+  wind_dir_avg_hour_entity: "",
+  wind_dir_avg_day_entity: "",
+  wind_dir_avg_month_entity: "",
+  wind_dir_avg_year_entity: "",
+  wind_speed_avg_hour_entity: "",
+  wind_speed_avg_day_entity: "",
+  wind_speed_avg_month_entity: "",
+  wind_speed_avg_year_entity: "",
   // Sonne
   uv_entity: "",
   radiation_entity: "",
@@ -62,10 +75,14 @@ const DEFAULTS = {
   // Optionen
   minmax_mode: "24h", // 24h | today
   wind_unit: "auto", // auto | km/h | m/s | kn | mph | bft
-  windrose_periods: ["1h", "8h", "24h", "14d"],
+  windrose_periods: ["today", "1h", "8h", "24h", "7d", "30d", "1y", "summer", "winter"],
   windrose_default: "24h",
-  rain_days: 14,
-  sun_days: 14,
+  wind_chart_periods: ["today", "8h", "24h", "3d", "7d", "30d", "1y"],
+  wind_chart_default: "24h",
+  rain_periods: ["7d", "14d", "30d", "1y", "summer", "winter"],
+  rain_default: "14d",
+  sun_periods: ["7d", "14d", "30d", "1y", "summer", "winter"],
+  sun_default: "14d",
   skin_type: 2,
   sunshine_threshold: 120,
   rain_day_threshold: 0.1,
@@ -86,19 +103,33 @@ const HIST_KEYS = ENTITY_KEYS.filter((k) => k !== "sun_entity");
 const ALL_TABS = ["now", "sun", "wind", "rain", "year"];
 const LUX_TO_WM2 = 0.0079; // Näherung Sonnenlicht: 1 W/m² ≈ 127 lx
 const MED = [200, 250, 300, 450, 600, 1000]; // minimale Erythemdosis J/m² je Hauttyp I–VI
-const ROSE_PERIODS = { "1h": HOUR, "3h": 3 * HOUR, "8h": 8 * HOUR, "12h": 12 * HOUR, "24h": DAY, "3d": 3 * DAY, "7d": 7 * DAY, "14d": 14 * DAY, "30d": 30 * DAY };
+// Zeiträume wie bei der Helios Compass Card: kurz = Verlauf, ab 7 Tagen = Langzeitstatistik
+const RANGES = {
+  today: { today: true },
+  "1h": { ms: HOUR }, "3h": { ms: 3 * HOUR }, "8h": { ms: 8 * HOUR }, "12h": { ms: 12 * HOUR }, "24h": { ms: DAY }, "3d": { ms: 3 * DAY },
+  "7d": { ms: 7 * DAY, stats: true, days: 7 }, "14d": { ms: 14 * DAY, stats: true, days: 14 }, "30d": { ms: 30 * DAY, stats: true, days: 30 },
+  "1y": { ms: 365 * DAY, stats: true, year: true },
+  summer: { ms: 365 * DAY, stats: true, year: true, months: [4, 5, 6, 7, 8, 9] },
+  winter: { ms: 365 * DAY, stats: true, year: true, months: [10, 11, 12, 1, 2, 3] },
+};
+const DAY_RANGES = ["7d", "14d", "30d", "1y", "summer", "winter"];
+const rangeStart = (k) => (RANGES[k]?.today ? new Date().setHours(0, 0, 0, 0) : Date.now() - (RANGES[k]?.ms || DAY));
+const inMonths = (t, months) => !months || months.includes(new Date(t).getMonth() + 1);
 
 /* ----------------------------------------------------------------- Texte */
 
 const T = {
   de: {
+    r: { today: "Heute", "1h": "1 Std.", "3h": "3 Std.", "8h": "8 Std.", "12h": "12 Std.", "24h": "24 Std.", "3d": "3 Tage", "7d": "7 Tage", "14d": "14 Tage", "30d": "30 Tage", "1y": "1 Jahr", summer: "Sommer", winter: "Winter" },
+    r_desc: { summer: "Apr–Sep, letzte 12 Monate", winter: "Okt–Mär, letzte 12 Monate", "1y": "letzte 12 Monate" },
+    wind_chart: "Wind & Böen",
     tabs: { now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr" },
     sunrise: "Aufgang", sunset: "Untergang", daylength: "Tageslänge", noon: "Sonnenhöchststand", elevation: "Höhe", azimuth: "Azimut",
     vs_yesterday: "zu gestern", below_horizon: "Nacht", next_rise: "Nächster Aufgang",
     uv_curve: "UV heute", uv_dose: "UV-Dosis heute", sed: "SED", burn: "Sonnenbrand nach (ungeschützt)", skin: "Hauttyp", no_burn: "kein Risiko",
     rad_title: "Sonnenstrahlung", rad_now: "Jetzt", clear_sky: "Klarhimmel", clearness: "Klarheit", sunshine: "Sonnenschein heute", energy: "Energie heute", rad_max: "Max heute",
     sky: ["trüb", "bewölkt", "leicht bewölkt", "sonnig"],
-    sun_days_title: "Sonnenstunden je Tag", sun_hours: "Sonnenstunden", day_curve: "Tagesverlauf",
+    sun_days_title: "Sonnenstunden", sun_hours: "Sonnenstunden", day_curve: "Tagesverlauf",
     outdoor: "Außen", feels: "Gefühlt", indoor: "Innen", dew: "Taupunkt", humidity: "Luftfeuchte", indoor_hum: "Feuchte innen",
     pressure: "Luftdruck", temperature: "Temperatur", min: "Min", max: "Max", last24: "letzte 24 h", today: "heute",
     computed: "berechnet",
@@ -121,7 +152,7 @@ const T = {
     gusty: ["gleichmäßig", "leicht böig", "böig", "stark böig"], rose_by: "Windrose nach", wind_mode: "Wind", gust_mode: "Böen",
     wind_values: "Windwerte", knots: "Knoten", gusts_kn: "Böen (Knoten)", avg_speed: "Ø Geschwindigkeit", variability: "Schwankung 10 min",
     rain: "Regen", raining: "Es regnet", dry_now: "Kein Regen", rate: "Regenrate", rain_today: "Heute", rain_24h: "24 h", rain_yesterday: "Gestern",
-    rain_week: "Woche", rain_month: "Monat", rain_year: "Jahr", rain_total: "Gesamt", rain_days_title: "Niederschlag je Tag",
+    rain_week: "Woche", rain_event: "Regenereignis", rain_month: "Monat", rain_year: "Jahr", rain_total: "Gesamt", rain_days_title: "Niederschlag",
     days_dry: "Tage ohne Regen", day_dry: "Tag ohne Regen", intensity: ["leicht", "mäßig", "stark", "sehr stark"], last_rain: "Letzter Regen",
     climate: "Klimatage", vs_last: "zum Vorjahr",
     cd: { summer: "Sommertage", hot: "Heiße Tage", tropical: "Tropennächte", frost: "Frosttage", ice: "Eistage", rain: "Regentage", sun: "Sonnenstunden" },
@@ -130,17 +161,21 @@ const T = {
     climate_chart: "Klimadiagramm", this_year: "dieses Jahr", last_year: "Vorjahr", temp_mean: "Ø Temperatur", precip: "Niederschlag",
     months: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"],
     no_stats: "Keine Langzeitstatistik – der Sensor braucht eine state_class.",
+    no_dir_stats: "Keine Langzeitstatistik der Windrichtung – dafür ist ein Sensor in Grad mit state_class nötig (Text wie „N“ reicht nur bis 3 Tage).",
     missing: "Bitte mindestens einen Sensor im Karten-Editor wählen.",
     loading: "Lade Verlauf …", ago: "vor {n}",
   },
   en: {
+    r: { today: "Today", "1h": "1 hr", "3h": "3 hrs", "8h": "8 hrs", "12h": "12 hrs", "24h": "24 hrs", "3d": "3 days", "7d": "7 days", "14d": "14 days", "30d": "30 days", "1y": "1 year", summer: "Summer", winter: "Winter" },
+    r_desc: { summer: "Apr–Sep, last 12 months", winter: "Oct–Mar, last 12 months", "1y": "last 12 months" },
+    wind_chart: "Wind & gusts",
     tabs: { now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year" },
     sunrise: "Sunrise", sunset: "Sunset", daylength: "Day length", noon: "Solar noon", elevation: "Elevation", azimuth: "Azimuth",
     vs_yesterday: "vs. yesterday", below_horizon: "night", next_rise: "Next sunrise",
     uv_curve: "UV today", uv_dose: "UV dose today", sed: "SED", burn: "Sunburn after (unprotected)", skin: "Skin type", no_burn: "no risk",
     rad_title: "Solar radiation", rad_now: "Now", clear_sky: "Clear sky", clearness: "Clearness", sunshine: "Sunshine today", energy: "Energy today", rad_max: "Max today",
     sky: ["overcast", "cloudy", "partly cloudy", "sunny"],
-    sun_days_title: "Sunshine hours per day", sun_hours: "Sunshine hours", day_curve: "Daily curve",
+    sun_days_title: "Sunshine hours", sun_hours: "Sunshine hours", day_curve: "Daily curve",
     outdoor: "Outdoor", feels: "Feels like", indoor: "Indoor", dew: "Dew point", humidity: "Humidity", indoor_hum: "Indoor humidity",
     pressure: "Pressure", temperature: "Temperature", min: "Min", max: "Max", last24: "last 24 h", today: "today",
     computed: "computed",
@@ -163,7 +198,7 @@ const T = {
     gusty: ["steady", "slightly gusty", "gusty", "very gusty"], rose_by: "Wind rose by", wind_mode: "Wind", gust_mode: "Gusts",
     wind_values: "Wind values", knots: "Knots", gusts_kn: "Gusts (knots)", avg_speed: "Ø speed", variability: "Variation 10 min",
     rain: "Rain", raining: "Raining", dry_now: "No rain", rate: "Rain rate", rain_today: "Today", rain_24h: "24 h", rain_yesterday: "Yesterday",
-    rain_week: "Week", rain_month: "Month", rain_year: "Year", rain_total: "Total", rain_days_title: "Precipitation per day",
+    rain_week: "Week", rain_event: "Rain event", rain_month: "Month", rain_year: "Year", rain_total: "Total", rain_days_title: "Precipitation",
     days_dry: "days without rain", day_dry: "day without rain", intensity: ["light", "moderate", "heavy", "very heavy"], last_rain: "Last rain",
     climate: "Climate days", vs_last: "vs. last year",
     cd: { summer: "Summer days", hot: "Hot days", tropical: "Tropical nights", frost: "Frost days", ice: "Ice days", rain: "Rain days", sun: "Sunshine hours" },
@@ -172,6 +207,7 @@ const T = {
     climate_chart: "Climate chart", this_year: "this year", last_year: "last year", temp_mean: "Ø temperature", precip: "Precipitation",
     months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
     no_stats: "No long-term statistics – the sensor needs a state_class.",
+    no_dir_stats: "No long-term statistics for wind direction – this needs a sensor in degrees with a state_class (text like \"N\" only works up to 3 days).",
     missing: "Please pick at least one sensor in the card editor.",
     loading: "Loading history …", ago: "{n} ago",
   },
@@ -338,6 +374,35 @@ function windStats(dirPts, spdPts, start, end) {
   };
 }
 
+/** Windrose aus Stundenstatistik (je Stunde Gewicht 1) */
+function roseFromHourly(dirRows, spdRows, from, months) {
+  const spdBy = new Map((spdRows || []).map((r) => [r.start, r.mean]));
+  const sectors = Array.from({ length: 16 }, () => new Array(ROSE_CLASSES.length).fill(0));
+  let sx = 0, sy = 0, tot = 0, calm = 0, moving = 0, spdSum = 0, spdN = 0;
+  for (const r of dirRows || []) {
+    if (r.start < from || !inMonths(r.start, months) || !ok(r.mean)) continue;
+    const sp = spdBy.get(r.start);
+    tot++;
+    if (ok(sp)) { spdSum += sp; spdN++; }
+    if (ok(sp) && sp < ROSE_CLASSES[0]) { calm++; continue; }
+    moving++;
+    sx += Math.sin(rad(r.mean)); sy += Math.cos(rad(r.mean));
+    let cls = 0;
+    if (ok(sp)) for (let i = 0; i < ROSE_CLASSES.length; i++) if (sp >= ROSE_CLASSES[i]) cls = i;
+    sectors[Math.round(norm360(r.mean) / 22.5) % 16][cls]++;
+  }
+  if (!tot) return null;
+  const secTot = sectors.map((c) => c.reduce((a, b) => a + b, 0));
+  const top = secTot.indexOf(Math.max(...secTot));
+  return {
+    total: tot * HOUR, calmPct: (calm / tot) * 100,
+    sectors: sectors.map((c) => c.map((v) => (v / tot) * 100)),
+    secPct: secTot.map((v) => (v / tot) * 100),
+    mean: moving ? norm360((Math.atan2(sx, sy) * 180) / Math.PI) : NaN, R: moving ? Math.hypot(sx, sy) / moving : NaN,
+    top: secTot[top] > 0 ? top : -1, avgSpeed: spdN ? spdSum / spdN : NaN,
+  };
+}
+
 /** Mittel aus Stundenstatistik (für Monat/Jahr) */
 function windStatsFromHourly(dirRows, spdRows) {
   const spdBy = new Map((spdRows || []).map((r) => [r.start, r.mean]));
@@ -430,7 +495,7 @@ class ThorWeatherCard extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._tab = null;
-    this._rose = null;
+    this._sel = {};
     this._roseMode = null;
     this._hist = {};
     this._daily = null;
@@ -476,17 +541,21 @@ class ThorWeatherCard extends HTMLElement {
     const c = { ...DEFAULTS, ...config };
     c.tabs = (Array.isArray(c.tabs) && c.tabs.length ? c.tabs : DEFAULTS.tabs).filter((t) => ALL_TABS.includes(t));
     if (!c.tabs.length) c.tabs = [...DEFAULTS.tabs];
-    c.windrose_periods = (Array.isArray(c.windrose_periods) && c.windrose_periods.length ? c.windrose_periods : DEFAULTS.windrose_periods).filter((p) => p in ROSE_PERIODS);
-    if (!c.windrose_periods.length) c.windrose_periods = [...DEFAULTS.windrose_periods];
-    c.rain_days = clamp(Math.round(num(c.rain_days) || 14), 7, 60);
-    c.sun_days = clamp(Math.round(num(c.sun_days) || 14), 7, 60);
+    const lists = { windrose_periods: Object.keys(RANGES), wind_chart_periods: Object.keys(RANGES), rain_periods: DAY_RANGES, sun_periods: DAY_RANGES };
+    for (const [k, allowed] of Object.entries(lists)) {
+      // alte Angaben wie "14d" bleiben gültig
+      c[k] = (Array.isArray(c[k]) && c[k].length ? c[k] : DEFAULTS[k]).filter((p) => allowed.includes(p));
+      if (!c[k].length) c[k] = [...DEFAULTS[k]];
+    }
     c.refresh_minutes = clamp(num(c.refresh_minutes) || 5, 1, 60);
     c.rain_day_threshold = Math.max(0, ok(num(c.rain_day_threshold)) ? num(c.rain_day_threshold) : 0.1);
     const old = this._config;
     this._config = c;
     if (!this._tab || !c.tabs.includes(this._tab) || (old && old.default_tab !== c.default_tab)) this._tab = c.tabs.includes(c.default_tab) ? c.default_tab : c.tabs[0];
-    if (!this._rose || !c.windrose_periods.includes(this._rose) || (old && old.windrose_default !== c.windrose_default)) {
-      this._rose = c.windrose_periods.includes(c.windrose_default) ? c.windrose_default : c.windrose_periods[c.windrose_periods.length - 1];
+    for (const [sel, list, def] of [["rose", "windrose_periods", "windrose_default"], ["wind", "wind_chart_periods", "wind_chart_default"], ["rain", "rain_periods", "rain_default"], ["sun", "sun_periods", "sun_default"]]) {
+      const cur = this._sel[sel] ?? this._load(sel);
+      const defChanged = old && old[def] !== c[def];
+      this._sel[sel] = !defChanged && c[list].includes(cur) ? cur : c[list].includes(c[def]) ? c[def] : c[list][Math.min(2, c[list].length - 1)];
     }
     if (!this._roseMode || (old && old.windrose_mode !== c.windrose_mode)) this._roseMode = c.windrose_mode === "gust" ? "gust" : "wind";
     const entChanged = !old || ENTITY_KEYS.some((k) => old[k] !== c[k]);
@@ -596,7 +665,7 @@ class ThorWeatherCard extends HTMLElement {
   _val(key) {
     const st = this._state(key);
     if (!st) return NaN;
-    if (key === "wind_direction_entity") return parseDir(st.state);
+    if (key === "wind_direction_entity" || key.startsWith("wind_dir_avg_")) return parseDir(st.state);
     let v = num(st.state);
     if (key === "pressure_entity" && ok(v)) v += num(this._config.pressure_offset) || 0;
     return v;
@@ -702,10 +771,34 @@ class ThorWeatherCard extends HTMLElement {
     }
   }
 
-  _roseMaxMs() {
+  /** längster Zeitraum, der aus dem Roh-Verlauf kommt (Wind) */
+  _rawWindMs() {
     const c = this._config;
-    const list = c.show_windrose ? c.windrose_periods.map((p) => ROSE_PERIODS[p]) : [];
-    return Math.max(DAY, ...list);
+    const lists = [...(c.show_windrose ? c.windrose_periods : []), ...(c.show_gust_chart ? c.wind_chart_periods : [])];
+    return Math.max(DAY, ...lists.filter((k) => !RANGES[k].stats).map((k) => (RANGES[k].today ? DAY : RANGES[k].ms)));
+  }
+
+  _key(k) {
+    return `thor-weather-card:${this._config?.title || ""}:${k}`;
+  }
+
+  _load(k) {
+    try { return localStorage.getItem(this._key(k)); } catch (e) { return null; }
+  }
+
+  _save(k, v) {
+    try { localStorage.setItem(this._key(k), v); } catch (e) { /* ignorieren */ }
+  }
+
+  _rangeButtons(sel, list) {
+    const t = this._t;
+    if (list.length < 2) return "";
+    return `<div class="pbtns">${list.map((k) => `<button class="pbtn ${k === this._sel[sel] ? "on" : ""}" data-range="${sel}:${k}" ${t.r_desc[k] ? `title="${esc(t.r_desc[k])}"` : ""}>${esc(t.r[k])}</button>`).join("")}</div>`;
+  }
+
+  _rangeTitle(k) {
+    const t = this._t;
+    return `${t.r[k]}${t.r_desc[k] ? ` <span class="muted">(${esc(t.r_desc[k])})</span>` : ""}`;
   }
 
   async _fetch() {
@@ -722,7 +815,7 @@ class ThorWeatherCard extends HTMLElement {
       const windIds = [c.wind_speed_entity, c.wind_gust_entity, c.wind_direction_entity];
       const [h1, h2] = await Promise.all([
         this._history(short, start24, now),
-        this._history(windIds, now - this._roseMaxMs(), now),
+        this._history(windIds, now - this._rawWindMs(), now),
       ]);
       if (token !== this._token) return;
       const hist = {};
@@ -751,15 +844,16 @@ class ThorWeatherCard extends HTMLElement {
     const startLast = new Date(y - 1, 0, 1).getTime();
     const rainId = c.rain_total_entity || c.rain_today_entity;
     const wantClimate = c.show_climate_days || c.show_climate_chart || c.show_rain_chart || c.show_rain;
-    const wantWind = c.show_wind_averages && c.wind_direction_entity;
+    const wantWind = (c.show_wind_averages || c.show_windrose || c.show_gust_chart || c.show_wind_values) && (c.wind_direction_entity || c.wind_speed_entity);
     const radId = c[this._radKey()] || "";
     const wantSun = radId && (c.show_sun_chart || c.show_climate_days);
-    const [tStats, rStats, wDir, wSpd, sStats] = await Promise.all([
+    const [tStats, rStats, wDir, wSpd, sStats, wGust] = await Promise.all([
       wantClimate && c.outdoor_temp_entity ? this._stats([c.outdoor_temp_entity], startLast, now, "day", ["min", "max", "mean"]) : {},
       wantClimate && rainId ? this._stats([rainId], startLast, now, "day", ["change", "max"]) : {},
-      wantWind ? this._stats([c.wind_direction_entity], now - 366 * DAY, now, "hour", ["mean"]) : {},
+      wantWind && c.wind_direction_entity ? this._stats([c.wind_direction_entity], now - 366 * DAY, now, "hour", ["mean"]) : {},
       wantWind && c.wind_speed_entity ? this._stats([c.wind_speed_entity], now - 366 * DAY, now, "hour", ["mean"]) : {},
-      wantSun ? this._stats([radId], c.show_climate_days ? startLast : now - (c.sun_days + 1) * DAY, now, "hour", ["mean"]) : {},
+      wantSun ? this._stats([radId], startLast, now, "hour", ["mean"]) : {},
+      wantWind && c.wind_gust_entity ? this._stats([c.wind_gust_entity], now - 366 * DAY, now, "hour", ["max", "mean"]) : {},
     ]);
     if (token !== this._token) return;
     this._daily = {
@@ -770,6 +864,11 @@ class ThorWeatherCard extends HTMLElement {
     this._hourly = {
       dir: wDir[c.wind_direction_entity] || [],
       spd: (wSpd[c.wind_speed_entity] || []).map((r) => ({ ...r, mean: ok(r.mean) ? r.mean * f : r.mean })),
+      gust: (wGust[c.wind_gust_entity] || []).map((r) => {
+        const fg = this._kmhFactor("wind_gust_entity");
+        const v = ok(r.max) ? r.max : r.mean;
+        return { start: r.start, mean: ok(v) ? v * fg : NaN };
+      }),
     };
     const rk = this._radKey();
     this._sunHourly = (sStats[radId] || []).map((r) => ({ start: r.start, w: this._radW(r.mean, rk) })).filter((r) => ok(r.w));
@@ -943,8 +1042,11 @@ class ThorWeatherCard extends HTMLElement {
       this._tab = b.dataset.tab;
       this._render();
     }));
-    this.shadowRoot.querySelectorAll("[data-rose]").forEach((b) => b.addEventListener("click", () => {
-      this._rose = b.dataset.rose;
+    this.shadowRoot.querySelectorAll("[data-range]").forEach((b) => b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const [sel, val] = b.dataset.range.split(":");
+      this._sel[sel] = val;
+      this._save(sel, val);
       this._render();
     }));
     this.shadowRoot.querySelectorAll("[data-rmode]").forEach((b) => b.addEventListener("click", (ev) => {
@@ -1528,33 +1630,17 @@ class ThorWeatherCard extends HTMLElement {
     const t = this._t;
     if (!this._sunHourly) return "";
     const map = this._sunDays();
-    const n = c.sun_days;
-    const today = new Date().setHours(0, 0, 0, 0);
-    const list = [];
-    for (let i = n - 1; i >= 0; i--) {
-      const d = new Date(today - i * DAY + 12 * HOUR).setHours(0, 0, 0, 0);
-      list.push(map.get(d) || { t: d, h: 0, kwh: 0, none: true });
-    }
-    if (list.every((x) => x.none)) return "";
-    const W = 320, H = 120, padB = 18, padT = 14;
-    const mx = Math.max(4, ...list.map((x) => x.h));
-    const bw = W / n;
-    let s = "";
-    list.forEach((d, i) => {
-      const x = i * bw;
-      const h = (d.h / mx) * (H - padB - padT);
-      if (d.h > 0) {
-        s += `<rect x="${(x + bw * 0.15).toFixed(1)}" y="${(H - padB - h).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="#f59e0b"><title>${this._date(d.t)}: ${this._fmt(d.h, 1)} h · ${this._fmt(d.kwh, 2)} kWh/m²</title></rect>`;
-        if (n <= 21 || d.h >= mx * 0.3) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${(H - padB - h - 3).toFixed(1)}" class="bl">${this._fmt(d.h, d.h < 10 ? 1 : 0)}</text>`;
-      }
-      const every = n > 21 ? 7 : n > 14 ? 2 : 1;
-      if ((n - 1 - i) % every === 0) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 5}" class="bl muted">${new Date(d.t).getDate()}.</text>`;
-    });
-    s += `<line x1="0" x2="${W}" y1="${H - padB}" y2="${H - padB}" class="axis"/>`;
-    const sum = list.reduce((a, b) => a + b.h, 0);
-    const kwh = list.reduce((a, b) => a + b.kwh, 0);
-    return `<div class="panel"><div class="panel-t row"><span>${esc(t.sun_days_title)}</span><span class="small muted">${n} ${this._lang === "de" ? "Tage" : "days"}: <b>${this._fmt(sum, 0)} h</b> · ${this._fmt(kwh, 1)} kWh/m²</span></div>
-      <svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg></div>`;
+    const rk = this._sel.sun;
+    const { items } = this._periodBars(rk, (d) => map.get(d)?.h);
+    if (!items.some((x) => x.has)) return "";
+    let kwh = 0;
+    const first = items[0].t;
+    for (const [d, e] of map) if (d >= first && inMonths(d, RANGES[rk].months)) kwh += e.kwh;
+    const sum = items.reduce((a, b) => a + b.v, 0);
+    const fmt = (v, short) => (short ? this._fmt(v, v < 10 ? 1 : 0) : `${this._fmt(v, 1)} h`);
+    return `<div class="panel"><div class="panel-t row"><span>${esc(t.sun_days_title)} · ${this._rangeTitle(rk)}</span><span class="small muted"><b>${this._fmt(sum, 0)} h</b> · ${this._fmt(kwh, 1)} kWh/m²</span></div>
+      ${this._barChart(items, "#f59e0b", fmt)}
+      ${this._rangeButtons("sun", c.sun_periods)}</div>`;
   }
 
   /* ---------------------------------------------------------------- Wind */
@@ -1659,44 +1745,80 @@ class ThorWeatherCard extends HTMLElement {
       ${gi && gi.level >= 0 ? `<div class="small">${esc(t.gustiness)}: <b>${esc(t.gusty[gi.level])}</b> <span class="muted">· ${esc(t.gust_factor)} ${this._fmt(gi.factor, 1)}</span></div>` : ""}`;
   }
 
+  /** Wind/Böen in Intervalle: Wind = Mittel, Böen = Maximum */
+  _windBins(rk) {
+    const c = this._config;
+    const R0 = RANGES[rk];
+    const now = Date.now(), from = rangeStart(rk);
+    const bins = [];
+    if (!R0.stats) {
+      const fw = this._kmhFactor("wind_speed_entity"), fg = this._kmhFactor("wind_gust_entity");
+      const w = this._series("wind_speed_entity").map((p) => ({ t: p.t, v: p.v * fw }));
+      const g = c.wind_gust_entity ? this._series("wind_gust_entity").map((p) => ({ t: p.t, v: p.v * fg })) : [];
+      const span = now - from;
+      const B = Math.max(60000, Math.round(span / 144 / 60000) * 60000);
+      const n = Math.ceil(span / B);
+      for (let i = 0; i < n; i++) bins.push({ t: from + i * B, acc: 0, dur: 0, w: NaN, g: NaN });
+      for (const sg of stepSegments(w, from, now)) {
+        for (let tt = sg.t0; tt < sg.t1;) {
+          const i = Math.min(n - 1, Math.floor((tt - from) / B));
+          const end = Math.min(sg.t1, from + (i + 1) * B);
+          bins[i].acc += sg.v * (end - tt); bins[i].dur += end - tt; tt = end;
+        }
+      }
+      bins.forEach((b) => (b.w = b.dur ? b.acc / b.dur : NaN));
+      for (const sg of stepSegments(g, from, now)) {
+        const i0 = Math.floor((sg.t0 - from) / B), i1 = Math.min(n - 1, Math.floor((sg.t1 - 1 - from) / B));
+        for (let i = i0; i <= i1; i++) bins[i].g = ok(bins[i].g) ? Math.max(bins[i].g, sg.v) : sg.v;
+      }
+      return { bins, unit: B };
+    }
+    // Statistik: stündlich, ab 30 Tagen täglich zusammengefasst
+    const gBy = new Map((this._hourly?.gust || []).map((r) => [r.start, r.mean]));
+    const rows = new Map();
+    for (const r of this._hourly?.spd || []) if (r.start >= from && inMonths(r.start, R0.months)) rows.set(r.start, { t: r.start, w: r.mean, g: gBy.get(r.start) ?? NaN });
+    for (const r of this._hourly?.gust || []) if (r.start >= from && inMonths(r.start, R0.months) && !rows.has(r.start)) rows.set(r.start, { t: r.start, w: NaN, g: r.mean });
+    let list = [...rows.values()].sort((a, b) => a.t - b.t);
+    const factors = list.map((b) => (ok(b.g) && ok(b.w) && b.w >= 5 ? b.g / b.w : NaN)).filter(ok);
+    if (R0.ms > 30 * DAY || R0.days >= 30) {
+      const byDay = new Map();
+      for (const b of list) {
+        const k = new Date(b.t).setHours(0, 0, 0, 0);
+        const e = byDay.get(k) || { t: k, s: 0, n: 0, g: NaN };
+        if (ok(b.w)) { e.s += b.w; e.n++; }
+        if (ok(b.g)) e.g = ok(e.g) ? Math.max(e.g, b.g) : b.g;
+        byDay.set(k, e);
+      }
+      list = [...byDay.values()].map((e) => ({ t: e.t, w: e.n ? e.s / e.n : NaN, g: e.g }));
+      return { bins: list, unit: DAY, factors };
+    }
+    return { bins: list, unit: HOUR, factors };
+  }
+
   _gustChart() {
     const c = this._config;
     const t = this._t;
-    const now = Date.now(), from = now - DAY;
-    const fw = this._kmhFactor("wind_speed_entity"), fg = this._kmhFactor("wind_gust_entity");
-    const w = this._series("wind_speed_entity").map((p) => ({ t: p.t, v: p.v * fw }));
-    const g = c.wind_gust_entity ? this._series("wind_gust_entity").map((p) => ({ t: p.t, v: p.v * fg })) : [];
-    if (w.length < 2 && g.length < 2) return "";
-    // auf 10-Minuten-Raster: Wind = Mittel, Böen = Maximum
-    const B = 10 * 60000, n = Math.ceil(DAY / B);
-    const wb = new Array(n).fill(NaN), gb = new Array(n).fill(NaN);
-    const acc = new Array(n).fill(0), dur = new Array(n).fill(0);
-    for (const sg of stepSegments(w, from, now)) {
-      for (let tt = sg.t0; tt < sg.t1;) {
-        const i = Math.min(n - 1, Math.floor((tt - from) / B));
-        const end = Math.min(sg.t1, from + (i + 1) * B);
-        acc[i] += sg.v * (end - tt); dur[i] += end - tt; tt = end;
-      }
-    }
-    acc.forEach((a, i) => (wb[i] = dur[i] ? a / dur[i] : NaN));
-    for (const sg of stepSegments(g, from, now)) {
-      const i0 = Math.floor((sg.t0 - from) / B), i1 = Math.min(n - 1, Math.floor((sg.t1 - 1 - from) / B));
-      for (let i = i0; i <= i1; i++) gb[i] = ok(gb[i]) ? Math.max(gb[i], sg.v) : sg.v;
-    }
+    const rk = this._sel.wind;
+    const R0 = RANGES[rk];
+    const { bins, unit, factors } = this._windBins(rk);
+    const wb = bins.map((b) => b.w), gb = bins.map((b) => b.g);
     const all = [...wb, ...gb].filter(ok);
-    if (!all.length) return "";
+    const head = `<div class="panel-t row"><span>${esc(t.wind_chart)} · ${this._rangeTitle(rk)}</span><span class="small muted">${this._lang === "de" ? "Achse" : "axis"}: Beaufort</span></div>`;
+    if (!all.length) return `<div class="panel">${head}<div class="empty">${esc(this._loading ? t.loading : R0.stats ? t.no_stats : t.nodata)}</div>${this._rangeButtons("wind", c.wind_chart_periods)}</div>`;
+    const n = bins.length;
     const W = 320, H = 130, L = 26, top = 8, bot = 16;
     const mxKmh = Math.max(12, ...all) * 1.1;
     const X = (i) => L + ((i + 0.5) / n) * (W - L);
     const Y = (v) => top + (1 - v / mxKmh) * (H - top - bot);
     let s = "";
-    // Beaufort-Linien
     for (let b = 1; b < BFT_KMH.length; b++) {
       const v = BFT_KMH[b - 1];
       if (v > mxKmh) break;
       if (v < 6 && mxKmh > 40) continue;
       s += `<line x1="${L}" x2="${W}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="grid"/><text x="${L - 3}" y="${Y(v).toFixed(1)}" class="al" text-anchor="end">${b}</text>`;
     }
+    // Lücken (z. B. Sommer/Winter) als Trennlinie
+    for (let i = 1; i < n; i++) if (bins[i].t - bins[i - 1].t > unit * 3) s += `<line x1="${((X(i) + X(i - 1)) / 2).toFixed(1)}" x2="${((X(i) + X(i - 1)) / 2).toFixed(1)}" y1="${top}" y2="${H - bot}" stroke="var(--secondary-text-color)" stroke-dasharray="2 2" opacity=".5"/>`;
     const path = (arr) => {
       let d = "", pen = false;
       arr.forEach((v, i) => {
@@ -1707,38 +1829,41 @@ class ThorWeatherCard extends HTMLElement {
       return d;
     };
     const dw = path(wb), dg = path(gb);
-    // Fläche Wind
     if (dw) {
       const idx = wb.map((v, i) => (ok(v) ? i : -1)).filter((i) => i >= 0);
-      s += `<path d="${dw} L${X(idx[idx.length - 1]).toFixed(1)},${H - bot} L${X(idx[0]).toFixed(1)},${H - bot} Z" fill="var(--thor-blue)" opacity=".22"/><path d="${dw}" fill="none" stroke="var(--thor-blue)" stroke-width="1.8"/>`;
+      s += `<path d="${dw} L${X(idx[idx.length - 1]).toFixed(1)},${H - bot} L${X(idx[0]).toFixed(1)},${H - bot} Z" fill="var(--thor-blue)" opacity=".22"/><path d="${dw}" fill="none" stroke="var(--thor-blue)" stroke-width="${n > 200 ? 1.2 : 1.8}"/>`;
     }
-    if (dg) s += `<path d="${dg}" fill="none" stroke="var(--thor-gust)" stroke-width="1.2" opacity=".95"/>`;
-    // Spitzen markieren
+    if (dg) s += `<path d="${dg}" fill="none" stroke="var(--thor-gust)" stroke-width="1.1" opacity=".95"/>`;
     const gi = gb.reduce((b, v, i) => (ok(v) && (b < 0 || v > gb[b]) ? i : b), -1);
     if (gi >= 0) s += `<circle cx="${X(gi).toFixed(1)}" cy="${Y(gb[gi]).toFixed(1)}" r="3" fill="var(--thor-gust)"/><text x="${clamp(X(gi), L + 20, W - 20).toFixed(1)}" y="${(Y(gb[gi]) - 7).toFixed(1)}" class="bl">${this._speed(gb[gi]).v}</text>`;
     s += `<line x1="${L}" x2="${W}" y1="${H - bot}" y2="${H - bot}" class="axis"/>`;
-    for (let h = 0; h <= 24; h += 6) {
-      const tt = from + h * HOUR;
-      s += `<text x="${clamp(L + (h / 24) * (W - L), L + 10, W - 12).toFixed(1)}" y="${H - 3}" class="bl muted">${this._time(tt)}</text>`;
+    const long = unit >= DAY || (bins.length && bins[n - 1].t - bins[0].t > 2 * DAY);
+    for (let k = 0; k <= 4; k++) {
+      const i = Math.min(n - 1, Math.round((k / 4) * (n - 1)));
+      const tt = bins[i].t;
+      const lbl = long ? this._date(tt) : this._time(tt);
+      s += `<text x="${clamp(X(i), L + 14, W - 14).toFixed(1)}" y="${H - 3}" class="bl muted">${lbl}</text>`;
     }
-    const gi24 = c.wind_gust_entity ? this._gustInfo(DAY) : null;
-    if (gi24) {
-      // Böenfaktor je 10-min-Intervall (nur bei Wind ≥ 5 km/h), Median
-      const fs = gb.map((gv, i) => (ok(gv) && ok(wb[i]) && wb[i] >= 5 ? gv / wb[i] : NaN)).filter(ok).sort((a, b) => a - b);
-      gi24.factor = fs.length ? fs[Math.floor(fs.length / 2)] : NaN;
-      gi24.level = !ok(gi24.factor) ? -1 : gi24.factor < 1.3 ? 0 : gi24.factor < 1.6 ? 1 : gi24.factor < 2 ? 2 : 3;
-    }
-    const wmax = Math.max(...wb.filter(ok));
-    const sm = this._speed(wmax), sg = gi24 && ok(gi24.peak) ? this._speed(gi24.peak) : null, sa = this._speed(gi24?.mean);
-    return `<div class="panel"><div class="panel-t row"><span>${esc(t.gust_chart)}</span><span class="small muted">${this._lang === "de" ? "Achse" : "axis"}: Beaufort</span></div>
+    // Kennzahlen über den Zeitraum
+    const wv = wb.filter(ok), gv = gb.filter(ok);
+    const mean = wv.length ? wv.reduce((a, b) => a + b, 0) / wv.length : NaN;
+    const wmax = wv.length ? Math.max(...wv) : NaN;
+    const peak = gi >= 0 ? gb[gi] : NaN;
+    const fs = (factors || bins.map((b) => (ok(b.g) && ok(b.w) && b.w >= 5 ? b.g / b.w : NaN)).filter(ok)).slice().sort((a, b) => a - b);
+    const factor = fs.length ? fs[Math.floor(fs.length / 2)] : NaN;
+    const level = !ok(factor) ? -1 : factor < 1.3 ? 0 : factor < 1.6 ? 1 : factor < 2 ? 2 : 3;
+    const sm = this._speed(wmax), sg = this._speed(peak), sa = this._speed(mean);
+    const res = unit >= DAY ? (this._lang === "de" ? "Tag" : "day") : unit >= HOUR ? (this._lang === "de" ? "Stunde" : "hour") : `${Math.round(unit / 60000)} min`;
+    return `<div class="panel">${head}
       <svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg>
-      <div class="legend center small"><span><i style="background:var(--thor-blue)"></i>${esc(t.mean_wind)} (Ø 10 min)</span>${dg ? `<span><i style="background:var(--thor-gust)"></i>${esc(t.gusts)} (max 10 min)</span>` : ""}</div>
+      <div class="legend center small"><span><i style="background:var(--thor-blue)"></i>${esc(t.mean_wind)} (Ø ${esc(res)})</span>${dg ? `<span><i style="background:var(--thor-gust)"></i>${esc(t.gusts)} (max ${esc(res)})</span>` : ""}</div>
       <div class="chips ex">
-        ${gi24 && ok(gi24.mean) ? this._chip("mdi:weather-windy", `Ø ${t.mean_wind} 24 h`, `${sa.v} ${sa.u}`, "wind_speed_entity") : ""}
+        ${ok(mean) ? this._chip("mdi:weather-windy", `Ø ${t.mean_wind}`, `${sa.v} ${sa.u}`, "wind_speed_entity") : ""}
         ${ok(wmax) ? this._chip("mdi:arrow-up-bold-outline", `${t.mean_wind} ${t.max}`, `${sm.v} ${sm.u} · ${beaufort(wmax)} Bft`, "wind_speed_entity") : ""}
-        ${sg ? this._chip("mdi:weather-windy-variant", `${t.gust_peak} 24 h`, `${sg.v} ${sg.u} · ${beaufort(gi24.peak)} Bft`, "wind_gust_entity") : ""}
-        ${gi24 && gi24.level >= 0 ? this._chip("mdi:chart-bell-curve-cumulative", t.gustiness, `${t.gusty[gi24.level]} · ${this._fmt(gi24.factor, 1)}`) : ""}
-      </div></div>`;
+        ${ok(peak) ? this._chip("mdi:weather-windy-variant", t.gust_peak, `${sg.v} ${sg.u} · ${beaufort(peak)} Bft${gi >= 0 ? ` · ${long ? this._date(bins[gi].t) : this._time(bins[gi].t)}` : ""}`, "wind_gust_entity") : ""}
+        ${level >= 0 ? this._chip("mdi:chart-bell-curve-cumulative", t.gustiness, `${t.gusty[level]} · ${this._fmt(factor, 1)}`) : ""}
+      </div>
+      ${this._rangeButtons("wind", c.wind_chart_periods)}</div>`;
   }
 
   _dirSpread(ms) {
@@ -1767,9 +1892,18 @@ class ThorWeatherCard extends HTMLElement {
     const items = [
       ["hour", this._windStats(HOUR)],
       ["day", this._windStats(DAY)],
-      ["month", this._windHourlyStats(30 * DAY) || (this._roseMaxMs() >= 14 * DAY ? this._windStats(this._roseMaxMs()) : null)],
+      ["month", this._windHourlyStats(30 * DAY)],
       ["year", this._windHourlyStats(365 * DAY)],
-    ];
+    ].map(([k, st]) => {
+      // fertige Mittelwerte der Station haben Vorrang
+      const d = this._val(`wind_dir_avg_${k}_entity`);
+      const sp = this._kmh(`wind_speed_avg_${k}_entity`);
+      if (!ok(d) && !ok(sp)) return [k, st];
+      const o = { ...(st || { top: -1, R: NaN }) };
+      if (ok(d)) o.mean = d;
+      if (ok(sp)) o.avgSpeed = sp;
+      return [k, o];
+    });
     const cells = items.map(([k, st]) => {
       const cx = 60, cy = 60, r = 40;
       let s = this._houseImage(cx, cy, r - 1, `thor-a-${k}`);
@@ -1796,9 +1930,12 @@ class ThorWeatherCard extends HTMLElement {
   _windrose() {
     const c = this._config;
     const t = this._t;
-    const ms = ROSE_PERIODS[this._rose] || DAY;
+    const rk = this._sel.rose;
+    const R0 = RANGES[rk];
     const gustMode = this._roseMode === "gust" && !!c.wind_gust_entity;
-    const st = this._windStats(ms, gustMode);
+    const st = R0.stats
+      ? roseFromHourly(this._hourly?.dir, gustMode ? this._hourly?.gust : this._hourly?.spd, rangeStart(rk), R0.months)
+      : this._windStats(Date.now() - rangeStart(rk), gustMode);
     const cx = 150, cy = 150, R = 112, r0 = 16;
     let s = this._houseImage(cx, cy, R, "thor-rclip");
     let maxPct = 0;
@@ -1841,20 +1978,15 @@ class ThorWeatherCard extends HTMLElement {
       return `<span class="lg"><i style="background:${ROSE_COLORS[i]}"></i>${esc(lbl)} <b>${this._fmt(pct, 0)}%</b></span>`;
     }).join("");
     const unit = c.wind_unit === "bft" ? "" : ` <span class="muted">(${esc(this._speed(1).u)})</span>`;
-    const btns = c.windrose_periods.map((p) => `<button class="pbtn ${p === this._rose ? "on" : ""}" data-rose="${p}">${esc(this._periodLabel(p))}</button>`).join("");
+    const btns = this._rangeButtons("rose", c.windrose_periods);
     return `<div class="panel">
       <div class="panel-t row"><span>${esc(t.rose)}${gustMode ? ` · <span style="color:var(--thor-gust)">${esc(t.gust_mode)}</span>` : ""}</span>${st && st.top >= 0 ? `<span class="small muted">${esc(t.rose_top)}: <b>${this._cardinal(st.top * 22.5)}</b> · ${esc(t.rose_calm)} ${Math.round(st.calmPct)} %</span>` : ""}</div>
-      ${st ? `<svg viewBox="0 0 300 300" class="rose">${s}</svg>` : `<div class="empty">${esc(this._loading ? t.loading : t.nodata)}</div>`}
+      ${st ? `<svg viewBox="0 0 300 300" class="rose">${s}</svg>` : `<div class="empty">${esc(this._loading ? t.loading : R0.stats ? t.no_dir_stats : t.nodata)}</div>`}
       <div class="legend center small">${legend}${unit}</div>
-      <div class="pbtns">${btns}</div>
+      ${R0.stats || R0.months ? `<div class="small muted center">${this._rangeTitle(rk)} · ${this._lang === "de" ? "aus Stundenmitteln" : "from hourly means"}</div>` : ""}
+      ${btns}
       ${c.wind_gust_entity ? `<div class="pbtns"><span class="small muted">${esc(t.rose_by)}</span><button class="pbtn ${!gustMode ? "on" : ""}" data-rmode="wind">${esc(t.wind_mode)}</button><button class="pbtn ${gustMode ? "on gust" : ""}" data-rmode="gust">${esc(t.gust_mode)}</button></div>` : ""}
     </div>`;
-  }
-
-  _periodLabel(p) {
-    const n = parseInt(p, 10);
-    if (this._lang === "de") return p.endsWith("h") ? `${n} ${n === 1 ? "Stunde" : "Std."}` : `${n} ${n === 1 ? "Tag" : "Tage"}`;
-    return p.endsWith("h") ? `${n} ${n === 1 ? "hour" : "hrs"}` : `${n} ${n === 1 ? "day" : "days"}`;
   }
 
   _windValues() {
@@ -1915,11 +2047,11 @@ class ThorWeatherCard extends HTMLElement {
     tile(t.rain_today, rtoday, totalKey);
     if (c.rain_total_entity) tile(t.rain_24h, this._rainSince(Date.now() - DAY), totalKey, "mdi:clock-outline");
     if (yesterday && ok(yesterday.rain)) tile(t.rain_yesterday, yesterday.rain, totalKey, "mdi:calendar-arrow-left");
-    if (days) {
-      tile(t.rain_week, sumFrom(weekStart), totalKey, "mdi:calendar-week");
-      tile(t.rain_month, sumFrom(monthStart), totalKey, "mdi:calendar-month");
-      tile(t.rain_year, sumFrom(yearStart), totalKey, "mdi:calendar-blank");
-    }
+    const sensorOr = (key, computed) => (c[key] ? this._rainMm(this._val(key)) : computed);
+    if (c.rain_event_entity) tile(t.rain_event, this._rainMm(this._val("rain_event_entity")), "rain_event_entity", "mdi:weather-pouring");
+    if (days || c.rain_week_entity) tile(t.rain_week, sensorOr("rain_week_entity", days ? sumFrom(weekStart) : NaN), c.rain_week_entity ? "rain_week_entity" : totalKey, "mdi:calendar-week");
+    if (days || c.rain_month_entity) tile(t.rain_month, sensorOr("rain_month_entity", days ? sumFrom(monthStart) : NaN), c.rain_month_entity ? "rain_month_entity" : totalKey, "mdi:calendar-month");
+    if (days || c.rain_year_entity) tile(t.rain_year, sensorOr("rain_year_entity", days ? sumFrom(yearStart) : NaN), c.rain_year_entity ? "rain_year_entity" : totalKey, "mdi:calendar-blank");
     if (c.rain_total_entity) tile(t.rain_total, this._rainMm(this._val("rain_total_entity")), totalKey, "mdi:sigma");
     let lastRain = "";
     if (days) {
@@ -1945,43 +2077,76 @@ class ThorWeatherCard extends HTMLElement {
     </div>`;
   }
 
+  /** Werte je Tag (7–30 Tage) oder je Monat (1 Jahr / Sommer / Winter) */
+  _periodBars(rk, dayValue) {
+    const R0 = RANGES[rk];
+    const today = new Date().setHours(0, 0, 0, 0);
+    const items = [];
+    if (R0.days) {
+      for (let i = R0.days - 1; i >= 0; i--) {
+        const d = new Date(today - i * DAY + 12 * HOUR).setHours(0, 0, 0, 0);
+        const v = dayValue(d);
+        items.push({ t: d, v: ok(v) ? v : 0, has: ok(v), wk: [0, 6].includes(new Date(d).getDay()), label: `${new Date(d).getDate()}.`, title: this._date(d) });
+      }
+      return { items, monthly: false };
+    }
+    const now = new Date();
+    for (let m = 11; m >= 0; m--) {
+      const s0 = new Date(now.getFullYear(), now.getMonth() - m, 1);
+      if (!inMonths(s0.getTime(), R0.months)) continue;
+      const s1 = new Date(s0.getFullYear(), s0.getMonth() + 1, 1);
+      let sum = 0, has = false, nDays = 0;
+      for (let d = s0.getTime(); d < s1.getTime() && d <= today; d = new Date(d + DAY + 12 * HOUR).setHours(0, 0, 0, 0)) {
+        const v = dayValue(d);
+        if (ok(v)) { sum += v; has = true; nDays++; }
+      }
+      items.push({ t: s0.getTime(), v: sum, has, nDays, label: this._t.months[s0.getMonth()], title: `${this._t.months[s0.getMonth()]} ${s0.getFullYear()}` });
+    }
+    return { items, monthly: true };
+  }
+
+  _barChart(items, color, fmt, colorFn) {
+    const n = items.length;
+    const W = 320, H = 120, padB = 18, padT = 14;
+    const mx = Math.max(1, ...items.map((x) => x.v));
+    const bw = W / n;
+    let s = "";
+    items.forEach((d, i) => {
+      const h = (d.v / mx) * (H - padB - padT);
+      const x = i * bw;
+      if (d.wk) s += `<rect x="${x}" y="0" width="${bw}" height="${H - padB}" class="wkend"/>`;
+      if (d.v > 0) {
+        s += `<rect x="${(x + bw * 0.15).toFixed(1)}" y="${(H - padB - h).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${colorFn ? colorFn(d) : color}"><title>${esc(d.title)}: ${fmt(d.v)}</title></rect>`;
+        if (n <= 14 || d.v >= mx * 0.3) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${(H - padB - h - 3).toFixed(1)}" class="bl">${fmt(d.v, true)}</text>`;
+      }
+      const every = n > 21 ? 7 : n > 14 ? 2 : 1;
+      if ((n - 1 - i) % every === 0) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 5}" class="bl muted">${esc(d.label)}</text>`;
+    });
+    s += `<line x1="0" x2="${W}" y1="${H - padB}" y2="${H - padB}" class="axis"/>`;
+    return `<svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg>`;
+  }
+
   _rainChart() {
     const c = this._config;
     const t = this._t;
     const days = this._days();
-    if (!days) return c.rain_total_entity || c.rain_today_entity ? `<div class="panel"><div class="panel-t">${esc(t.rain_days_title)}</div><div class="empty">${esc(this._loading ? t.loading : t.no_stats)}</div></div>` : "";
-    const n = c.rain_days;
-    const today = new Date().setHours(0, 0, 0, 0);
-    const list = [];
-    for (let i = n - 1; i >= 0; i--) {
-      const d = new Date(today - i * DAY + 12 * HOUR).setHours(0, 0, 0, 0);
-      const e = days.find((x) => x.t === d);
-      list.push({ t: d, v: e && ok(e.rain) ? e.rain : 0, has: !!(e && ok(e.rain)) });
-    }
-    if (!list.some((x) => x.has)) return "";
+    const rk = this._sel.rain;
+    const head = `<div class="panel-t row"><span>${esc(t.rain_days_title)} · ${this._rangeTitle(rk)}</span>`;
+    if (!days) return c.rain_total_entity || c.rain_today_entity ? `<div class="panel">${head}</div><div class="empty">${esc(this._loading ? t.loading : t.no_stats)}</div></div>` : "";
+    const byDay = new Map(days.map((d) => [d.t, d.rain]));
+    const { items, monthly } = this._periodBars(rk, (d) => byDay.get(d));
+    if (!items.some((x) => x.has)) return "";
     const u = this._rainUnit();
     const toU = (mm) => (u === "in" ? mm / 25.4 : mm);
-    const W = 320, H = 120, padB = 18, padT = 14;
-    const mx = Math.max(1, ...list.map((x) => x.v));
-    const bw = W / n;
-    let s = "";
-    list.forEach((d, i) => {
-      const h = (d.v / mx) * (H - padB - padT);
-      const x = i * bw;
-      const wk = [0, 6].includes(new Date(d.t).getDay());
-      if (wk) s += `<rect x="${x}" y="0" width="${bw}" height="${H - padB}" class="wkend"/>`;
-      if (d.v > 0) {
-        s += `<rect x="${(x + bw * 0.15).toFixed(1)}" y="${(H - padB - h).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="${d.v >= c.rain_day_threshold ? "#3b82f6" : "#93c5fd"}"><title>${this._date(d.t)}: ${this._fmt(toU(d.v), 1)} ${u}</title></rect>`;
-        if (d.v >= mx * 0.25 || n <= 14) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${(H - padB - h - 3).toFixed(1)}" class="bl">${this._fmt(toU(d.v), d.v < 10 ? 1 : 0)}</text>`;
-      }
-      const every = n > 21 ? 7 : n > 14 ? 2 : 1;
-      if ((n - 1 - i) % every === 0) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 5}" class="bl muted">${new Date(d.t).getDate()}.</text>`;
-    });
-    s += `<line x1="0" x2="${W}" y1="${H - padB}" y2="${H - padB}" class="axis"/>`;
-    const sum = list.reduce((a, b) => a + b.v, 0);
-    const wetDays = list.filter((x) => x.v >= c.rain_day_threshold).length;
-    return `<div class="panel"><div class="panel-t row"><span>${esc(t.rain_days_title)}</span><span class="small muted">${n} ${this._lang === "de" ? "Tage" : "days"}: <b>${this._fmt(toU(sum), 1)} ${u}</b> · ${wetDays} ${esc(t.cd.rain)}</span></div>
-      <svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg></div>`;
+    const thr = c.rain_day_threshold;
+    const fmt = (v, short) => (short ? this._fmt(toU(v), v < 10 ? 1 : 0) : `${this._fmt(toU(v), 1)} ${u}`);
+    const sum = items.reduce((a, b) => a + b.v, 0);
+    let wet = 0;
+    const from = monthly ? items[0]?.t : items[0]?.t;
+    for (const d of days) if (d.t >= from && inMonths(d.t, RANGES[rk].months) && ok(d.rain) && d.rain >= thr) wet++;
+    return `<div class="panel">${head}<span class="small muted"><b>${this._fmt(toU(sum), 1)} ${u}</b> · ${wet} ${esc(t.cd.rain)}</span></div>
+      ${this._barChart(items, "#3b82f6", fmt, monthly ? null : (d) => (d.v >= thr ? "#3b82f6" : "#93c5fd"))}
+      ${this._rangeButtons("rain", c.rain_periods)}</div>`;
   }
 
   /* ---------------------------------------------------------------- Jahr */
@@ -2256,16 +2421,21 @@ const ED = {
       outdoor_temp_entity: "Außentemperatur", feels_like_entity: "Gefühlte Temperatur", indoor_temp_entity: "Innentemperatur", dew_point_entity: "Taupunkt",
       humidity_entity: "Luftfeuchte außen", indoor_humidity_entity: "Luftfeuchte innen", pressure_entity: "Luftdruck (relativ)",
       wind_speed_entity: "Windgeschwindigkeit", wind_gust_entity: "Windböen", wind_direction_entity: "Windrichtung",
-      rain_rate_entity: "Regenrate", rain_total_entity: "Regen-Zähler (Gesamt)", rain_today_entity: "Regen heute (täglich zurückgesetzt)", rain_state_entity: "Regen-Status",
+      rain_rate_entity: "Regenrate", rain_total_entity: "Regen-Zähler (Gesamt)", rain_today_entity: "Regen heute (täglich zurückgesetzt)", rain_state_entity: "Regen-Status", rain_event_entity: "Regenereignis (Event Rain)",
+      rain_week_entity: "Niederschlag Woche", rain_month_entity: "Niederschlag Monat", rain_year_entity: "Niederschlag Jahr",
+      wind_dir_avg_hour_entity: "Richtung Stundenmittel", wind_dir_avg_day_entity: "Richtung Tagesmittel", wind_dir_avg_month_entity: "Richtung Monatsmittel", wind_dir_avg_year_entity: "Richtung Jahresmittel",
+      wind_speed_avg_hour_entity: "Geschw. Stundenmittel", wind_speed_avg_day_entity: "Geschw. Tagesmittel", wind_speed_avg_month_entity: "Geschw. Monatsmittel", wind_speed_avg_year_entity: "Geschw. Jahresmittel",
       uv_entity: "UV-Index", radiation_entity: "Sonnenstrahlung (W/m²)", illuminance_entity: "Helligkeit (lx)", sun_entity: "Sonnen-Entität",
       show_sun_arc: "Sonnenbogen & Tageslänge", show_sun_uv: "UV-Kurve, Dosis & Sonnenbrandzeit", show_radiation: "Strahlung & Sonnenschein", show_sun_chart: "Sonnenstunden je Tag",
-      sun_days: "Tage im Sonnen-Diagramm", skin_type: "Hauttyp", sunshine_threshold: "Sonnenschein ab",
+      skin_type: "Hauttyp", sunshine_threshold: "Sonnenschein ab",
       title: "Titel", icon: "Symbol", show_header: "Kopfzeile", layout: "Layout", default_tab: "Start-Reiter", tabs: "Reiter / Abschnitte", language: "Sprache",
       show_hero: "Übersicht (Jetzt)", show_gauges: "Zeigerinstrumente", show_temps: "Temperatur-Kacheln", show_uv: "UV-Pyramide",
       show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", show_gust_chart: "Wind & Böen – Verlauf", windrose_mode: "Windrose zeigt",
       show_rain: "Regen-Status & Summen", show_rain_chart: "Regen je Tag", show_climate_days: "Klimatage", show_climate_chart: "Klimadiagramm",
-      minmax_mode: "Min/Max-Zeitraum", wind_unit: "Windeinheit", windrose_periods: "Windrosen-Zeiträume", windrose_default: "Windrose Start-Zeitraum",
-      rain_days: "Tage im Regen-Diagramm", rain_day_threshold: "Regentag ab", pressure_offset: "Luftdruck-Korrektur",
+      minmax_mode: "Min/Max-Zeitraum", wind_unit: "Windeinheit", windrose_periods: "Zeiträume Windrose", windrose_default: "Windrose: Start",
+      wind_chart_periods: "Zeiträume Wind & Böen", wind_chart_default: "Wind & Böen: Start", rain_periods: "Zeiträume Niederschlag", rain_default: "Niederschlag: Start",
+      sun_periods: "Zeiträume Sonnenstunden", sun_default: "Sonnenstunden: Start",
+      rain_day_threshold: "Regentag ab", pressure_offset: "Luftdruck-Korrektur",
       temp_gauge_min: "Temperatur-Skala von", temp_gauge_max: "Temperatur-Skala bis",
       image: "Hausbild (optional, z. B. /local/thor/haus.png)", image_scale: "Bildgröße", image_rotation: "Drehung (Norden des Bildes nach oben)", image_opacity: "Bild-Deckkraft", image_clip: "Bild rund auf den Kompass zuschneiden",
       refresh_minutes: "Verlauf aktualisieren alle",
@@ -2275,7 +2445,9 @@ const ED = {
       dew_point_entity: "Leer = wird aus Temperatur und Feuchte berechnet.",
       pressure_entity: "Relativer Luftdruck (auf Meereshöhe) – passend zu den Barometer-Wörtern.",
       rain_total_entity: "Fortlaufender Zähler (total_increasing) – daraus werden Tag, Woche, Monat, Jahr und Regentage berechnet.",
-      rain_today_entity: "Nur nötig, wenn es keinen Gesamt-Zähler gibt.",
+      rain_today_entity: "Optional – Tageswert der Station hat Vorrang vor der Berechnung.",
+      rain_week_entity: "Optional – sonst aus dem Gesamt-Zähler berechnet (gilt auch für Monat/Jahr).",
+      wind_dir_avg_hour_entity: "Ersetzen die berechneten Mittel – sinnvoll, wenn die Windrichtung nur als Text (N, NO …) vorliegt.",
       rain_state_entity: "Optional: binary_sensor oder Text-Sensor („Regen“ / „kein Regen“). Sonst zählt Regenrate > 0.",
       wind_direction_entity: "Grad (0–360) oder Himmelsrichtung (N, NNO, …).",
       show_wind_averages: "Monat/Jahr kommen aus der Langzeitstatistik von Home Assistant.",
@@ -2289,7 +2461,7 @@ const ED = {
       sunshine_threshold: "WMO: Sonnenschein ab 120 W/m².",
       skin_type: "Für die Sonnenbrandzeit (Fitzpatrick I–VI).",
     },
-    sections: { temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
+    sections: { windavg: "Wind-Mittelwerte der Station (optional)", temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
     opts: {
       tabs: "Reiter", stack: "Untereinander", now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr",
       wind_m: "Mittelwind", gust_m: "Böen",
@@ -2302,16 +2474,21 @@ const ED = {
       outdoor_temp_entity: "Outdoor temperature", feels_like_entity: "Feels-like temperature", indoor_temp_entity: "Indoor temperature", dew_point_entity: "Dew point",
       humidity_entity: "Outdoor humidity", indoor_humidity_entity: "Indoor humidity", pressure_entity: "Pressure (relative)",
       wind_speed_entity: "Wind speed", wind_gust_entity: "Wind gusts", wind_direction_entity: "Wind direction",
-      rain_rate_entity: "Rain rate", rain_total_entity: "Rain counter (total)", rain_today_entity: "Rain today (daily reset)", rain_state_entity: "Rain state",
+      rain_rate_entity: "Rain rate", rain_total_entity: "Rain counter (total)", rain_today_entity: "Rain today (daily reset)", rain_state_entity: "Rain state", rain_event_entity: "Rain event (event rain)",
+      rain_week_entity: "Rain week", rain_month_entity: "Rain month", rain_year_entity: "Rain year",
+      wind_dir_avg_hour_entity: "Direction hourly mean", wind_dir_avg_day_entity: "Direction daily mean", wind_dir_avg_month_entity: "Direction monthly mean", wind_dir_avg_year_entity: "Direction yearly mean",
+      wind_speed_avg_hour_entity: "Speed hourly mean", wind_speed_avg_day_entity: "Speed daily mean", wind_speed_avg_month_entity: "Speed monthly mean", wind_speed_avg_year_entity: "Speed yearly mean",
       uv_entity: "UV index", radiation_entity: "Solar radiation (W/m²)", illuminance_entity: "Illuminance (lx)", sun_entity: "Sun entity",
       show_sun_arc: "Sun arc & day length", show_sun_uv: "UV curve, dose & sunburn time", show_radiation: "Radiation & sunshine", show_sun_chart: "Sunshine hours per day",
-      sun_days: "Days in sun chart", skin_type: "Skin type", sunshine_threshold: "Sunshine from",
+      skin_type: "Skin type", sunshine_threshold: "Sunshine from",
       title: "Title", icon: "Icon", show_header: "Header", layout: "Layout", default_tab: "Start tab", tabs: "Tabs / sections", language: "Language",
       show_hero: "Overview (now)", show_gauges: "Dial gauges", show_temps: "Temperature tiles", show_uv: "UV pyramid",
       show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", show_gust_chart: "Wind & gusts – history", windrose_mode: "Wind rose shows",
       show_rain: "Rain state & totals", show_rain_chart: "Rain per day", show_climate_days: "Climate days", show_climate_chart: "Climate chart",
-      minmax_mode: "Min/max period", wind_unit: "Wind unit", windrose_periods: "Wind rose periods", windrose_default: "Wind rose start period",
-      rain_days: "Days in rain chart", rain_day_threshold: "Rain day from", pressure_offset: "Pressure correction",
+      minmax_mode: "Min/max period", wind_unit: "Wind unit", windrose_periods: "Wind rose periods", windrose_default: "Wind rose: start",
+      wind_chart_periods: "Wind & gusts periods", wind_chart_default: "Wind & gusts: start", rain_periods: "Precipitation periods", rain_default: "Precipitation: start",
+      sun_periods: "Sunshine periods", sun_default: "Sunshine: start",
+      rain_day_threshold: "Rain day from", pressure_offset: "Pressure correction",
       temp_gauge_min: "Temperature scale from", temp_gauge_max: "Temperature scale to",
       image: "House image (optional, e.g. /local/thor/house.png)", image_scale: "Image size", image_rotation: "Rotation (image north up)", image_opacity: "Image opacity", image_clip: "Crop image to the compass circle",
       refresh_minutes: "Refresh history every",
@@ -2321,7 +2498,9 @@ const ED = {
       dew_point_entity: "Empty = computed from temperature and humidity.",
       pressure_entity: "Relative (sea-level) pressure – matches the barometer words.",
       rain_total_entity: "Ever-increasing counter (total_increasing) – day, week, month, year and rain days are derived from it.",
-      rain_today_entity: "Only needed if there is no total counter.",
+      rain_today_entity: "Optional – the station's daily value takes precedence over the calculation.",
+      rain_week_entity: "Optional – otherwise computed from the total counter (also month/year).",
+      wind_dir_avg_hour_entity: "Replace the computed means – useful if the wind direction is only text (N, NE …).",
       rain_state_entity: "Optional: binary_sensor or text sensor (\"rain\" / \"no rain\"). Otherwise rain rate > 0 counts.",
       wind_direction_entity: "Degrees (0–360) or compass point (N, NNE, …).",
       show_wind_averages: "Month/year come from Home Assistant long-term statistics.",
@@ -2335,7 +2514,7 @@ const ED = {
       sunshine_threshold: "WMO: sunshine from 120 W/m².",
       skin_type: "For the sunburn time (Fitzpatrick I–VI).",
     },
-    sections: { temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
+    sections: { windavg: "Station wind means (optional)", temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
     opts: {
       tabs: "Tabs", stack: "Stacked", now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year",
       wind_m: "Mean wind", gust_m: "Gusts",
@@ -2373,7 +2552,9 @@ class ThorWeatherCardEditor extends HTMLElement {
     const grid = (schema) => ({ name: "", type: "grid", schema });
     const sec = (name, icon, schema, expanded = false) => ({ name, type: "expandable", flatten: true, expanded, title: L.sections[name], icon, schema });
     const tabOpts = ALL_TABS.map((k) => [k, o[k]]);
-    const periods = Object.keys(ROSE_PERIODS).map((p) => [p, p.replace("h", " h").replace("d", this._l() === ED.de ? " Tage" : " days")]);
+    const TL = T[this._l() === ED.de ? "de" : "en"];
+    const periods = Object.keys(RANGES).map((p) => [p, TL.r[p] + (TL.r_desc[p] ? ` (${TL.r_desc[p]})` : "")]);
+    const dayPeriods = DAY_RANGES.map((p) => [p, TL.r[p] + (TL.r_desc[p] ? ` (${TL.r_desc[p]})` : "")]);
     return [
       sec("temp", "mdi:thermometer", [
         { name: "outdoor_temp_entity", selector: ent() },
@@ -2385,10 +2566,19 @@ class ThorWeatherCardEditor extends HTMLElement {
         { name: "wind_direction_entity", selector: ent() },
         grid([{ name: "wind_speed_entity", selector: ent() }, { name: "wind_gust_entity", selector: ent() }]),
       ]),
+      sec("windavg", "mdi:compass-rose", [
+        grid([{ name: "wind_dir_avg_hour_entity", selector: ent() }, { name: "wind_speed_avg_hour_entity", selector: ent() }]),
+        grid([{ name: "wind_dir_avg_day_entity", selector: ent() }, { name: "wind_speed_avg_day_entity", selector: ent() }]),
+        grid([{ name: "wind_dir_avg_month_entity", selector: ent() }, { name: "wind_speed_avg_month_entity", selector: ent() }]),
+        grid([{ name: "wind_dir_avg_year_entity", selector: ent() }, { name: "wind_speed_avg_year_entity", selector: ent() }]),
+      ]),
       sec("rain", "mdi:weather-pouring", [
         { name: "rain_total_entity", selector: ent() },
         grid([{ name: "rain_rate_entity", selector: ent() }, { name: "rain_today_entity", selector: ent() }]),
         { name: "rain_state_entity", selector: { entity: { domain: ["binary_sensor", "sensor"] } } },
+        { name: "rain_event_entity", selector: ent() },
+        grid([{ name: "rain_week_entity", selector: ent() }, { name: "rain_month_entity", selector: ent() }]),
+        { name: "rain_year_entity", selector: ent() },
       ]),
       sec("sun", "mdi:sun-wireless", [
         grid([{ name: "uv_entity", selector: ent() }, { name: "radiation_entity", selector: ent() }]),
@@ -2427,11 +2617,16 @@ class ThorWeatherCardEditor extends HTMLElement {
           { name: "wind_unit", selector: sel([["auto", o.auto], ["km/h", "km/h"], ["m/s", "m/s"], ["kn", "kn"], ["mph", "mph"], ["bft", "Beaufort"]]) },
         ]),
         { name: "windrose_periods", selector: sel(periods, true) },
+        { name: "wind_chart_periods", selector: sel(periods, true) },
+        { name: "rain_periods", selector: sel(dayPeriods, true) },
+        { name: "sun_periods", selector: sel(dayPeriods, true) },
         grid([
           { name: "windrose_default", selector: sel(periods) },
+          { name: "wind_chart_default", selector: sel(periods) },
+          { name: "rain_default", selector: sel(dayPeriods) },
+          { name: "sun_default", selector: sel(dayPeriods) },
           { name: "windrose_mode", selector: sel([["wind", o.wind_m], ["gust", o.gust_m]]) },
-          { name: "rain_days", selector: n(7, 60, 1, this._l() === ED.de ? "Tage" : "days") },
-          { name: "sun_days", selector: n(7, 60, 1, this._l() === ED.de ? "Tage" : "days") },
+
           { name: "rain_day_threshold", selector: n(0, 10, 0.1, "mm") },
           { name: "pressure_offset", selector: n(-100, 100, 0.1, "hPa") },
           { name: "temp_gauge_min", selector: n(-60, 20, 1, "°C") },

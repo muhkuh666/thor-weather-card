@@ -48,6 +48,11 @@
 - Tmax/Tmin 24 h sowie Jahreshöchst- und -tiefstwert mit Datum
 - **Klimadiagramm**: Monatsmittel der Temperatur und Niederschlag, dieses Jahr gegen Vorjahr
 
+**Zeiträume (wie bei der Helios Compass Card)**
+- Knöpfe *Heute · 1 Std. · 8 Std. · 12 Std. · 24 Std. · 3/7/14/30 Tage · 1 Jahr · Sommer · Winter* an Windrose, Wind & Böen, Niederschlag und Sonnenstunden
+- Kurze Zeiträume kommen aus dem Verlauf, ab 7 Tagen aus der Langzeitstatistik; *Sommer* = Apr–Sep, *Winter* = Okt–Mär der letzten 12 Monate; 1 Jahr / Sommer / Winter als Monatsbalken
+- Die letzte Auswahl wird je Diagramm gemerkt
+
 **Allgemein**
 - Reiter (*Jetzt · Sonne · Wind · Regen · Jahr*) oder alles untereinander, jeder Bereich abschaltbar
 - Komplett im **grafischen Karten-Editor** einstellbar, Deutsch und Englisch, helles & dunkles Theme
@@ -106,7 +111,7 @@ skin_type: 2
 layout: tabs            # tabs | stack
 default_tab: now        # now | wind | rain | year
 wind_unit: auto         # auto | km/h | m/s | kn | mph | bft
-windrose_periods: [1h, 8h, 24h, 14d]
+windrose_periods: [today, 1h, 8h, 24h, 7d, 30d, 1y, summer, winter]
 windrose_default: 24h
 rain_day_threshold: 0.1
 image: /local/thor/haus.png
@@ -130,6 +135,9 @@ image_opacity: 0.55
 | `rain_total_entity` | Fortlaufender Regen-Zähler (`state_class: total_increasing`) – **empfohlen** |
 | `rain_today_entity` | Täglich zurückgesetzter Regen-Sensor – nur wenn es keinen Gesamt-Zähler gibt |
 | `rain_state_entity` | Optional `binary_sensor` oder Text-Sensor („Regen“/„kein Regen“); sonst zählt Regenrate > 0 |
+| `rain_event_entity` | Regen des aktuellen Ereignisses („Event Rain“) |
+| `rain_week_entity`, `rain_month_entity`, `rain_year_entity` | Summen der Station – haben Vorrang vor der Berechnung |
+| `wind_dir_avg_hour/day/month/year_entity`, `wind_speed_avg_hour/day/month/year_entity` | Fertige Wind-Mittelwerte der Station – ersetzen die berechneten Mittel (sinnvoll, wenn die Richtung nur als Text wie „N“ vorliegt) |
 | `uv_entity` | UV-Index |
 | `radiation_entity` | Sonnenstrahlung in W/m² (ein Lux-Sensor geht auch, genähert) |
 | `illuminance_entity` | Helligkeit in lx – optional, zusätzlich angezeigt / als Ersatz |
@@ -145,12 +153,13 @@ image_opacity: 0.55
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Einzelne Bereiche ein-/ausblenden |
 | `minmax_mode` | `24h` | Min/Max über die letzten 24 h oder `today` (seit Mitternacht) |
 | `wind_unit` | `auto` | `auto`, `km/h`, `m/s`, `kn`, `mph`, `bft` |
-| `windrose_periods` | `[1h, 8h, 24h, 14d]` | Beliebig aus `1h 3h 8h 12h 24h 3d 7d 14d 30d` |
+| `windrose_periods` | `[today, 1h, 8h, 24h, 7d, 30d, 1y, summer, winter]` | Zeitraum-Knöpfe der Windrose |
+| `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, 1y]` | Zeitraum-Knöpfe von Wind & Böen |
+| `rain_periods` / `sun_periods` | `[7d, 14d, 30d, 1y, summer, winter]` | Zeitraum-Knöpfe von Niederschlag / Sonnenstunden |
+| `windrose_default`, `wind_chart_default`, `rain_default`, `sun_default` | `24h`, `24h`, `14d`, `14d` | Start-Zeitraum (die letzte Auswahl merkt sich der Browser) |
 | `windrose_mode` | `wind` | Windrose nach `wind` (Mittelwind) oder `gust` (Böen) |
 | `skin_type` | `2` | Hauttyp I–VI (1–6) für die Sonnenbrandzeit |
 | `sunshine_threshold` | `120` | Ab wie viel W/m² Sonnenschein zählt (WMO) |
-| `sun_days` | `14` | Tage im Sonnenstunden-Diagramm (7–60) |
-| `rain_days` | `14` | Tage im Regen-Diagramm (7–60) |
 | `rain_day_threshold` | `0.1` | Ab wie viel mm ein Tag als Regentag zählt |
 | `pressure_offset` | `0` | hPa, die zum Messwert addiert werden (Höhenkorrektur) |
 | `temp_gauge_min` / `temp_gauge_max` | `-25` / `40` | Skala des Temperatur-Instruments (°C) |
@@ -160,6 +169,7 @@ image_opacity: 0.55
 
 ### Hinweise
 - **Verlauf & Statistik:** Min/Max, Verlaufskurven, Windrose sowie Stunden-/Tagesmittel kommen aus dem Recorder-Verlauf (`purge_keep_days` mindestens so groß wie der längste Windrosen-Zeitraum). Monats-/Jahresmittel, Regen je Tag, Klimatage und Klimadiagramm nutzen die **Langzeitstatistik** – die Sensoren brauchen eine `state_class` (`measurement` für Temperatur und Wind, `total_increasing` für den Regen-Zähler). Windrichtungs-Sensoren mit `state_class: measurement_angle` liefern exakte (kreisförmige) Stundenmittel.
+- Eine Windrichtung als Text (N, NNO …) hat keine Langzeitstatistik: Die Windrose ab 7 Tagen braucht dann einen Grad-Sensor; die Richtungsmittel können aus den Stationssensoren kommen.
 - Der Prognose-Text ist eine einfache Barometer-Faustregel (Druckniveau + 3-Stunden-Tendenz), keine Wetterdienst-Vorhersage.
 
 ## Unterstützung

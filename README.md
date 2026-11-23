@@ -48,6 +48,11 @@
 - Tmax/Tmin 24 h and the year's high and low with date
 - **Climate chart**: monthly mean temperature and precipitation, this year vs. last year
 
+**Periods (like the Helios Compass Card)**
+- Buttons *Today · 1 hr · 8 hrs · 12 hrs · 24 hrs · 3/7/14/30 days · 1 year · Summer · Winter* on wind rose, wind & gusts, precipitation and sunshine hours
+- Short periods come from the history, from 7 days on from the long-term statistics; *Summer* = Apr–Sep, *Winter* = Oct–Mar of the last 12 months; 1 year / summer / winter as monthly bars
+- The last selection is remembered per chart
+
 **General**
 - Tabs (*Now · Sun · Wind · Rain · Year*) or everything stacked, each section can be switched off
 - Fully configurable in the **visual card editor**, German and English, light & dark themes
@@ -106,7 +111,7 @@ skin_type: 2
 layout: tabs            # tabs | stack
 default_tab: now        # now | wind | rain | year
 wind_unit: auto         # auto | km/h | m/s | kn | mph | bft
-windrose_periods: [1h, 8h, 24h, 14d]
+windrose_periods: [today, 1h, 8h, 24h, 7d, 30d, 1y, summer, winter]
 windrose_default: 24h
 rain_day_threshold: 0.1
 image: /local/thor/house.png
@@ -130,6 +135,9 @@ image_opacity: 0.55
 | `rain_total_entity` | Ever-increasing rain counter (`state_class: total_increasing`) – **recommended** |
 | `rain_today_entity` | Daily-resetting rain sensor – only if there is no total counter |
 | `rain_state_entity` | Optional `binary_sensor` or text sensor ("rain"/"no rain"); otherwise rain rate > 0 |
+| `rain_event_entity` | Rain of the current event ("event rain") |
+| `rain_week_entity`, `rain_month_entity`, `rain_year_entity` | Station totals – take precedence over the calculation |
+| `wind_dir_avg_hour/day/month/year_entity`, `wind_speed_avg_hour/day/month/year_entity` | Ready-made wind means of the station – replace the computed means (useful if the direction is only text like "N") |
 | `uv_entity` | UV index |
 | `radiation_entity` | Solar radiation in W/m² (a lux sensor also works, approximated) |
 | `illuminance_entity` | Illuminance in lx – optional, shown in addition / fallback |
@@ -145,12 +153,13 @@ image_opacity: 0.55
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Switch individual sections on/off |
 | `minmax_mode` | `24h` | Min/max over the last 24 h or `today` (since midnight) |
 | `wind_unit` | `auto` | `auto`, `km/h`, `m/s`, `kn`, `mph`, `bft` |
-| `windrose_periods` | `[1h, 8h, 24h, 14d]` | Any of `1h 3h 8h 12h 24h 3d 7d 14d 30d` |
+| `windrose_periods` | `[today, 1h, 8h, 24h, 7d, 30d, 1y, summer, winter]` | Period buttons of the wind rose |
+| `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, 1y]` | Period buttons of the wind & gusts chart |
+| `rain_periods` / `sun_periods` | `[7d, 14d, 30d, 1y, summer, winter]` | Period buttons of the precipitation / sunshine chart |
+| `windrose_default`, `wind_chart_default`, `rain_default`, `sun_default` | `24h`, `24h`, `14d`, `14d` | Period shown first (the last choice is remembered in the browser) |
 | `windrose_mode` | `wind` | Wind rose by `wind` (mean wind) or `gust` |
 | `skin_type` | `2` | Skin type I–VI (1–6) for the sunburn time |
 | `sunshine_threshold` | `120` | W/m² from which it counts as sunshine (WMO) |
-| `sun_days` | `14` | Days in the sunshine chart (7–60) |
-| `rain_days` | `14` | Days in the rain chart (7–60) |
 | `rain_day_threshold` | `0.1` | mm from which a day counts as a rain day |
 | `pressure_offset` | `0` | hPa added to the reading (altitude correction) |
 | `temp_gauge_min` / `temp_gauge_max` | `-25` / `40` | Scale of the temperature gauge (°C) |
@@ -160,6 +169,7 @@ image_opacity: 0.55
 
 ### Notes
 - **History & statistics:** min/max, sparklines, wind rose and hour/day means come from the recorder history (keep `purge_keep_days` ≥ the longest wind-rose period). Month/year means, rain per day, climate days and the climate chart use the **long-term statistics** – the sensors need a `state_class` (`measurement` for temperature, wind; `total_increasing` for the rain counter). Wind direction sensors with `state_class: measurement_angle` give exact circular hourly means.
+- A wind direction given as text (N, NNE …) has no long-term statistics: the wind rose from 7 days on then needs a degree sensor; the direction means can come from the station sensors.
 - The forecast text is a simple barometric rule of thumb (pressure level + 3‑hour trend), not a weather service forecast.
 
 ## Support
