@@ -187,7 +187,7 @@ image_opacity: 0.55
 | Option | Standard | Beschreibung |
 |---|---|---|
 | `layout` | `tabs` | `tabs` (Reiter) oder `stack` (alles untereinander) |
-| `tabs` | `[now, forecast, sun, pollen, wind, rain, year, climate, home]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
+| `tabs` | `[now, forecast, sun, pollen, wind, rain, year, climate, air, home]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
 | `default_tab` | `now` | Start-Reiter |
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Einzelne Bereiche ein-/ausblenden |
 | `minmax_mode` | `24h` | Min/Max über die letzten 24 h oder `today` (seit Mitternacht) |

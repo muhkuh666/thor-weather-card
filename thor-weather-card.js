@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.5.2";
+const CARD_VERSION = "1.6.0";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -51,7 +51,7 @@ const DEFAULTS = {
   show_header: true,
   layout: "tabs", // tabs | stack
   default_tab: "now", // now | wind | rain | year
-  tabs: ["now", "forecast", "sun", "pollen", "wind", "rain", "year", "climate", "home"],
+  tabs: ["now", "forecast", "sun", "pollen", "wind", "rain", "year", "climate", "air", "home"],
   language: "auto",
   // Bereiche
   show_hero: true,
@@ -144,7 +144,7 @@ const DEFAULTS = {
 
 const ENTITY_KEYS = Object.keys(DEFAULTS).filter((k) => k.endsWith("_entity"));
 const HIST_KEYS = ENTITY_KEYS.filter((k) => k !== "sun_entity");
-const ALL_TABS = ["now", "forecast", "sun", "pollen", "wind", "rain", "year", "climate", "home"];
+const ALL_TABS = ["now", "forecast", "sun", "pollen", "wind", "rain", "year", "climate", "air", "home"];
 const satVap = (T) => 6.112 * Math.exp((17.62 * T) / (243.12 + T)); // hPa
 const absHum = (T, rh) => (216.7 * ((rh / 100) * satVap(T))) / (273.15 + T); // g/m³
 // Pollen: DWD-Skala 0–3 in halben Stufen
@@ -215,7 +215,7 @@ const T = {
       calm: "Ruhige Wetterlage ohne besondere Reize.", note: "Einschätzung nach meteorologischen Faustregeln, keine medizinische Aussage." },
     ra: { title: "Regen-Analyse", dwd: "Starkregen nach DWD-Schwellen", dry_now: "Trocken seit", dry_max: "Längste Trockenzeit", wet_max: "Längste Regenserie", until: "bis", heavy: "Starkregen", events: "Ereignisse", max1: "Max. 1 Stunde", max6: "Max. 6 Stunden",
       recent: "Letzte Regenereignisse", cls: ["", "Starkregen", "Unwetter", "extrem"], need: "Für Ereignisse wird ein Regen-Zähler (Gesamt) mit Langzeitstatistik gebraucht." },
-    tabs: { now: "Jetzt", forecast: "Prognose", sun: "Sonne", pollen: "Pollen", climate: "Klima", home: "Haus & Garten", wind: "Wind", rain: "Regen", year: "Jahr" },
+    tabs: { now: "Jetzt", forecast: "Prognose", sun: "Sonne", pollen: "Pollen", climate: "Klima", air: "Lüften", home: "Haus & Garten", wind: "Wind", rain: "Regen", year: "Jahr" },
     sunrise: "Aufgang", sunset: "Untergang", daylength: "Tageslänge", noon: "Sonnenhöchststand", elevation: "Höhe", azimuth: "Azimut",
     vs_yesterday: "zu gestern", below_horizon: "Nacht", next_rise: "Nächster Aufgang",
     uv_curve: "UV heute", uv_dose: "UV-Dosis heute", sed: "SED", burn: "Sonnenbrand nach (ungeschützt)", skin: "Hauttyp", no_burn: "kein Risiko",
@@ -304,7 +304,7 @@ const T = {
       calm: "Calm weather without particular stimuli.", note: "Assessment based on meteorological rules of thumb, not medical advice." },
     ra: { title: "Rain analysis", dwd: "Heavy rain per DWD thresholds", dry_now: "Dry for", dry_max: "Longest dry spell", wet_max: "Longest wet spell", until: "until", heavy: "Heavy rain", events: "events", max1: "Max. 1 hour", max6: "Max. 6 hours",
       recent: "Recent rain events", cls: ["", "heavy rain", "severe", "extreme"], need: "Rain events need a rain counter (total) with long-term statistics." },
-    tabs: { now: "Now", forecast: "Forecast", sun: "Sun", pollen: "Pollen", climate: "Climate", home: "Home & garden", wind: "Wind", rain: "Rain", year: "Year" },
+    tabs: { now: "Now", forecast: "Forecast", sun: "Sun", pollen: "Pollen", climate: "Climate", air: "Airing", home: "Home & garden", wind: "Wind", rain: "Rain", year: "Year" },
     sunrise: "Sunrise", sunset: "Sunset", daylength: "Day length", noon: "Solar noon", elevation: "Elevation", azimuth: "Azimuth",
     vs_yesterday: "vs. yesterday", below_horizon: "night", next_rise: "Next sunrise",
     uv_curve: "UV today", uv_dose: "UV dose today", sed: "SED", burn: "Sunburn after (unprotected)", skin: "Skin type", no_burn: "no risk",
@@ -1318,7 +1318,7 @@ class ThorWeatherCard extends HTMLElement {
     else if (c.layout === "stack") body = c.tabs.map((tab) => this._tabBody(tab)).join("");
     else body = this._tabBody(this._tab);
 
-    const tabList = !this._hass ? c.tabs : c.tabs.filter((k) => k !== "pollen" || this._pollenIds().length || (c.pollen_entities || []).length);
+    const tabList = !this._hass ? c.tabs : c.tabs.filter((k) => (k !== "pollen" || this._pollenIds().length || (c.pollen_entities || []).length) && (k !== "air" || c.show_indoor_climate));
     if (this._hass && !tabList.includes(this._tab) && tabList.length) this._tab = tabList[0];
     const tabs = c.layout === "tabs" && tabList.length > 1 && hasAny
       ? `<div class="tabs" role="tablist">${tabList.map((k) => `<button class="tab ${k === this._tab ? "on" : ""}" data-tab="${k}" role="tab">${esc(t.tabs[k])}</button>`).join("")}</div>`
@@ -1386,8 +1386,11 @@ class ThorWeatherCard extends HTMLElement {
     } else if (tab === "home") {
       if (c.show_vegetation && c.outdoor_temp_entity) parts.push(this._vegetation());
       if (c.show_degree_days && c.outdoor_temp_entity) parts.push(this._degreeDays());
-      if (c.show_indoor_climate) parts.push(this._indoorClimate());
+      // ohne eigenen Reiter „Lüften“ bleibt der Abschnitt wie bisher hier
+      if (c.show_indoor_climate && !c.tabs.includes("air")) parts.push(this._indoorClimate());
       if (c.show_water_balance && (c.rain_total_entity || c.rain_today_entity)) parts.push(this._waterBalance());
+    } else if (tab === "air") {
+      if (c.show_indoor_climate) parts.push(this._indoorClimate());
     } else if (tab === "pollen") {
       if (c.show_pollen) parts.push(this._pollen());
       if (c.show_pollen_history) parts.push(this._pollenHistory());
@@ -3916,7 +3919,7 @@ const ED = {
     },
     sections: { analysis: "Auswertungen", pollen: "Pollenflug", forecast: "Prognose", colors: "Farben", windavg: "Wind-Mittelwerte der Station (optional)", temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
     opts: {
-      climate: "Klima", home: "Haus & Garten",
+      climate: "Klima", air: "Lüften & Schimmel", home: "Haus & Garten",
       tabs: "Reiter", stack: "Untereinander", now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr",
       p_ppm: "Pollen/m³", p_city: "Stadt", p_rural: "Land", pollen: "Pollen",
       wind_m: "Mittelwind", gust_m: "Böen", m_freq: "Häufigkeit", m_speed: "Geschwindigkeit", m_bft: "Stärke (Beaufort)", forecast: "Prognose",
@@ -3987,7 +3990,7 @@ const ED = {
     },
     sections: { analysis: "Analyses", pollen: "Pollen", forecast: "Forecast", colors: "Colors", windavg: "Station wind means (optional)", temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
     opts: {
-      climate: "Climate", home: "Home & garden",
+      climate: "Climate", air: "Airing & mould", home: "Home & garden",
       tabs: "Tabs", stack: "Stacked", now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year",
       p_ppm: "Grains/m³", p_city: "Town", p_rural: "Countryside", pollen: "Pollen",
       wind_m: "Mean wind", gust_m: "Gusts", m_freq: "Frequency", m_speed: "Speed", m_bft: "Force (Beaufort)", forecast: "Forecast",
