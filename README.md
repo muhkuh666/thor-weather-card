@@ -27,6 +27,11 @@
 - **Alerts**: fog, frost / black ice, dew, storm (gusts or rapid pressure fall), thunderstorm tendency, heat and UV – each with level and the values behind it
 - Optional **forecast of a weather entity** (e.g. Met.no, DWD): hourly and daily with temperature, precipitation, probability and wind
 
+**Season**
+- Current **meteorological** and **astronomical** season (equinoxes and solstices to the minute, Meeus), year ring with progress, days until the next season, day length change
+- The running season so far **vs. the same period of earlier years** (temperature, rain, sunshine, frost/summer days) and a **seasons compared** table with anomalies
+- Season chip in the overview and a **Season** period button for wind rose, wind & gusts, precipitation and sunshine
+
 **Climate** *(from your long-term statistics, up to 30 years back)*
 - **Records & extremes**: highest/lowest temperature, warmest/coldest day, wettest day and month, strongest gust, highest/lowest pressure, sunniest day – plus **this calendar day in earlier years** with a 🏆 when today sets a new record, and a **monthly records** table
 - **Climate stripes** of your own station (each month vs. its average) and a **year comparison** table – year to date (fair) or whole years: mean, extremes, rain, sunshine, summer/frost/rain days
@@ -58,6 +63,7 @@
 
 **Wind**
 - Large compass with arrow, cardinal point, speed, Beaufort with description, the **10‑minute variation arc** and the 10‑minute mean
+- **Beaufort columns** for mean wind and gusts (0–12 in the classic colours) with the current value, the 24 h maximum and a legend with names and speed ranges
 - **Wind and gusts clearly separated**: comparison bars mean wind vs. gusts, **gustiness** (steady … very gusty) with gust factor, gusts in the compass and in the overview
 - **Wind & gusts chart (24 h)**: 10‑minute mean wind as area, 10‑minute max gust as line, Beaufort axis, peak gust marked
 - **Direction means for hour, day, month and year** (vector mean, not the wrong arithmetic mean) plus **prevailing direction** and **steadiness**
@@ -150,7 +156,7 @@ skin_type: 2
 layout: tabs            # tabs | stack
 default_tab: now        # now | wind | rain | year
 wind_unit: auto         # auto | km/h | m/s | kn | mph | bft
-windrose_periods: [today, 1h, 8h, 24h, 7d, 30d, 1y, summer, winter]
+windrose_periods: [today, 1h, 8h, 24h, 7d, 30d, season, 1y, summer, winter]
 windrose_default: 24h
 rain_day_threshold: 0.1
 image: /local/thor/house.png
@@ -192,10 +198,12 @@ image_opacity: 0.55
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Switch individual sections on/off |
 | `minmax_mode` | `24h` | Min/max over the last 24 h or `today` (since midnight) |
 | `wind_unit` | `auto` | `auto`, `km/h`, `m/s`, `kn`, `mph`, `bft` |
-| `windrose_periods` | `[today, 1h, 8h, 24h, 7d, 30d, 1y, summer, winter]` | Period buttons of the wind rose |
-| `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, 1y]` | Period buttons of the wind & gusts chart |
-| `rain_periods` / `sun_periods` | `[7d, 14d, 30d, 1y, summer, winter]` | Period buttons of the precipitation / sunshine chart |
+| `windrose_periods` | `[today, 1h, 8h, 24h, 7d, 30d, season, 1y, summer, winter]` | Period buttons of the wind rose |
+| `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, season, 1y]` | Period buttons of the wind & gusts chart |
+| `rain_periods` / `sun_periods` | `[7d, 14d, 30d, season, 1y, summer, winter]` | Period buttons of the precipitation / sunshine chart |
 | `windrose_default`, `wind_chart_default`, `rain_default`, `sun_default` | `24h`, `24h`, `14d`, `14d` | Period shown first (the last choice is remembered in the browser) |
+| `show_season`, `show_season_chip`, `show_bft_scale` | `true` | Season panel (Year tab), season chip in the overview, Beaufort columns |
+| `season_type` | `meteo` | Season shown first: `meteo` (1 March, 1 June …) or `astro` (equinox/solstice) |
 | `climate_years` | `10` | Years of long-term statistics for records, stripes, calendar (2–30) |
 | `show_records`, `show_stripes`, `show_calendar`, `show_vegetation`, `show_degree_days`, `show_indoor_climate`, `show_water_balance`, `show_night_frost`, `show_bio`, `show_rain_analysis` | `true` | Analyses on/off |
 | `heating_indoor` / `heating_limit` / `cooling_base` | `20` / `15` / `18` | Degree days G20/15 and cooling degree days (°C) |

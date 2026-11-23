@@ -27,6 +27,11 @@
 - **Hinweise**: Nebel, Frost / Glätte, Tau, Sturm (Böen oder schneller Druckfall), Gewitterneigung, Hitze und UV – jeweils mit Stufe und den Werten dahinter
 - Optional die **Vorhersage einer Wetter-Entität** (z. B. DWD, Met.no): stündlich und täglich mit Temperatur, Niederschlag, Wahrscheinlichkeit und Wind
 
+**Jahreszeit**
+- Aktuelle **meteorologische** und **astronomische** Jahreszeit (Tagundnachtgleichen und Sonnenwenden auf die Minute, nach Meeus), Jahresring mit Fortschritt, Tage bis zur nächsten Jahreszeit, Änderung der Tageslänge
+- Die laufende Jahreszeit **gegen denselben Zeitraum früherer Jahre** (Temperatur, Regen, Sonne, Frost-/Sommertage) und eine Tabelle **Jahreszeiten im Vergleich** mit Abweichungen
+- Jahreszeit-Chip in der Übersicht und Zeitraum-Knopf **Jahreszeit** für Windrose, Wind & Böen, Niederschlag und Sonnenstunden
+
 **Klima** *(aus deiner Langzeitstatistik, bis zu 30 Jahre zurück)*
 - **Rekorde & Extreme**: höchste/tiefste Temperatur, wärmster/kältester Tag, nassester Tag und Monat, stärkste Böe, höchster/tiefster Luftdruck, sonnigster Tag – dazu **dieser Kalendertag in früheren Jahren** mit 🏆, wenn heute ein neuer Rekord fällt, und eine Tabelle der **Monatsrekorde**
 - **Klimastreifen** deiner eigenen Station (jeder Monat gegen sein Mittel) und **Jahresvergleich** – bis heute (fair) oder ganze Jahre: Mittel, Extreme, Regen, Sonne, Sommer-/Frost-/Regentage
@@ -58,6 +63,7 @@
 
 **Wind**
 - Großer Kompass mit Pfeil, Himmelsrichtung, Geschwindigkeit, Beaufort mit Bezeichnung, **Schwankungsbogen der letzten 10 Minuten** und 10-Minuten-Mittel
+- **Beaufort-Säulen** für Mittelwind und Böen (0–12 in den klassischen Farben) mit aktuellem Wert, 24-h-Maximum und Legende mit Bezeichnung und Geschwindigkeitsbereich
 - **Wind und Böen klar getrennt**: Vergleichsbalken Mittelwind gegen Böen, **Böigkeit** (gleichmäßig … stark böig) mit Böenfaktor, Böen im Kompass und in der Übersicht
 - **Diagramm Wind & Böen (24 h)**: Mittelwind (10-Minuten-Mittel) als Fläche, Böen (10-Minuten-Maximum) als Linie, Beaufort-Achse, Spitzenböe markiert
 - **Richtungsmittel für Stunde, Tag, Monat und Jahr** (Vektormittel – nicht das falsche arithmetische Mittel) plus **Hauptrichtung** und **Beständigkeit**
@@ -150,7 +156,7 @@ skin_type: 2
 layout: tabs            # tabs | stack
 default_tab: now        # now | wind | rain | year
 wind_unit: auto         # auto | km/h | m/s | kn | mph | bft
-windrose_periods: [today, 1h, 8h, 24h, 7d, 30d, 1y, summer, winter]
+windrose_periods: [today, 1h, 8h, 24h, 7d, 30d, season, 1y, summer, winter]
 windrose_default: 24h
 rain_day_threshold: 0.1
 image: /local/thor/haus.png
@@ -192,10 +198,12 @@ image_opacity: 0.55
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Einzelne Bereiche ein-/ausblenden |
 | `minmax_mode` | `24h` | Min/Max über die letzten 24 h oder `today` (seit Mitternacht) |
 | `wind_unit` | `auto` | `auto`, `km/h`, `m/s`, `kn`, `mph`, `bft` |
-| `windrose_periods` | `[today, 1h, 8h, 24h, 7d, 30d, 1y, summer, winter]` | Zeitraum-Knöpfe der Windrose |
-| `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, 1y]` | Zeitraum-Knöpfe von Wind & Böen |
-| `rain_periods` / `sun_periods` | `[7d, 14d, 30d, 1y, summer, winter]` | Zeitraum-Knöpfe von Niederschlag / Sonnenstunden |
+| `windrose_periods` | `[today, 1h, 8h, 24h, 7d, 30d, season, 1y, summer, winter]` | Zeitraum-Knöpfe der Windrose |
+| `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, season, 1y]` | Zeitraum-Knöpfe von Wind & Böen |
+| `rain_periods` / `sun_periods` | `[7d, 14d, 30d, season, 1y, summer, winter]` | Zeitraum-Knöpfe von Niederschlag / Sonnenstunden |
 | `windrose_default`, `wind_chart_default`, `rain_default`, `sun_default` | `24h`, `24h`, `14d`, `14d` | Start-Zeitraum (die letzte Auswahl merkt sich der Browser) |
+| `show_season`, `show_season_chip`, `show_bft_scale` | `true` | Jahreszeit (Reiter Jahr), Jahreszeit in der Übersicht, Beaufort-Säulen |
+| `season_type` | `meteo` | Vorrangige Jahreszeit: `meteo` (1. März, 1. Juni …) oder `astro` (Tagundnachtgleiche/Sonnenwende) |
 | `climate_years` | `10` | Jahre Langzeitstatistik für Rekorde, Klimastreifen, Kalender (2–30) |
 | `show_records`, `show_stripes`, `show_calendar`, `show_vegetation`, `show_degree_days`, `show_indoor_climate`, `show_water_balance`, `show_night_frost`, `show_bio`, `show_rain_analysis` | `true` | Auswertungen ein/aus |
 | `heating_indoor` / `heating_limit` / `cooling_base` | `20` / `15` / `18` | Gradtagzahl G20/15 und Kühlgradtage (°C) |
