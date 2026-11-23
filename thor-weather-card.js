@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.11.0";
+const CARD_VERSION = "1.11.1";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -71,7 +71,7 @@ const DEFAULTS = {
   show_rose_moon: true,
   show_moon_arc: true,
   show_rose_solstices: true,
-  sky_on_compass: true,
+  sky_on_compass: false,
   show_sky_compass: true,
   twilight: "civil", // civil | nautical | astronomical
   // Prognose

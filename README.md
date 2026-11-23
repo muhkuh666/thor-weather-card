@@ -228,7 +228,7 @@ image_opacity: 0.55
 | `show_rose_sun`, `show_rose_moon` | `true` | Sun / moon (position and path) on the wind rose |
 | `show_rose_solstices` | `true` | Sun paths of 21 June and 21 December |
 | `show_sky_compass` | `true` | Separate sky compass in the *Sun* tab |
-| `sky_on_compass` | `true` | Sun & moon also on the wind compass |
+| `sky_on_compass` | `false` | Sun & moon also on the wind compass |
 | `show_rose_metric_switch`, `show_rose_now` | `true` | Switch in the card / current wind above the rose |
 | `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Colours (hex) |
 | `windrose_mode` | `wind` | Wind rose by `wind` (mean wind) or `gust` |

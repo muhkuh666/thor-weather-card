@@ -228,7 +228,7 @@ image_opacity: 0.55
 | `show_rose_sun`, `show_rose_moon` | `true` | Sonne / Mond (Position und Bahn) auf der Windrose |
 | `show_rose_solstices` | `true` | Sonnenbahnen am 21.6. und 21.12. |
 | `show_sky_compass` | `true` | Eigener Himmelskompass im Reiter *Sonne* |
-| `sky_on_compass` | `true` | Sonne & Mond auch auf dem Wind-Kompass |
+| `sky_on_compass` | `false` | Sonne & Mond auch auf dem Wind-Kompass |
 | `show_rose_metric_switch`, `show_rose_now` | `true` | Umschalter in der Karte / aktueller Wind über der Rose |
 | `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Farben (Hex) |
 | `windrose_mode` | `wind` | Windrose nach `wind` (Mittelwind) oder `gust` (Böen) |
