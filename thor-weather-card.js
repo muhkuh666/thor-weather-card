@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.5.1";
+const CARD_VERSION = "1.5.2";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -198,7 +198,7 @@ const T = {
     stripes: { title: "Klimastreifen & Jahresvergleich", hint: "Jeder Streifen ein Monat: blau = kälter, rot = wärmer als der Durchschnitt dieses Monats an deiner Station", vs: "ggü. Ø der Vorjahre",
       cmp: "Jahre im Vergleich", ytd: "Bis heute (gleicher Zeitraum)", full: "Ganzes Jahr", partial: "unvollständiges Jahr (Messbeginn oder Lücken)" },
     cal: { title: "Kalender", temp: "Temperatur", sun: "Sonne" },
-    veg: { title: "Vegetation & Garten", hint: "nach DWD", gts: "Grünlandtemperatursumme", start: "Vegetationsbeginn", not_yet: "noch nicht", days_vs: "T. ggü. Vj.", last_frost: "Letzter Frost (Frühjahr)", first_frost: "Erster Frost (Herbst)",
+    veg: { title: "Vegetation & Garten", hint: "nach DWD", gts: "Grünlandtemperatur\u00adsumme", start: "Vegetationsbeginn", not_yet: "noch nicht", days_vs: "T. ggü. Vj.", last_frost: "Letzter Frost (Frühjahr)", first_frost: "Erster Frost (Herbst)",
       frost_free: "Frostfreie Zeit", gdd: "Wachstumsgradtage (>5 °C)", d: "Tage", curve: "Grünlandtemperatursumme bis Mai" },
     dd: { title: "Heiz- & Kühlgradtage", g: "Gradtagzahl", vs_prev: "ggü. Vorjahr bis heute", heat_days: "Heiztage", cdd: "Kühlgradtage", season: "Heizperiode ab 1. Juli", prev: "Vorjahr",
       less: "Das Wetter hat bisher {p} % weniger Heizbedarf verursacht als im Vorjahr.", more: "Das Wetter hat bisher {p} % mehr Heizbedarf verursacht als im Vorjahr.",
@@ -3640,7 +3640,7 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .big { font-size: 1.35em; font-weight: 600; }
 .u { font-size: .55em; font-weight: 400; margin-left: 3px; color: var(--secondary-text-color); }
 .empty { padding: 18px; text-align:center; color: var(--secondary-text-color); }
-.tabs { display:flex; gap:2px; margin: 2px 0 10px; border-bottom: 1px solid var(--divider-color); overflow-x:auto; scrollbar-width:none; }
+.tabs { display:flex; flex-wrap:wrap; gap:2px; margin: 2px 0 10px; border-bottom: 1px solid var(--divider-color); }
 .tabs::-webkit-scrollbar { display:none; }
 .tab { flex:1 0 auto; white-space:nowrap; background:none; border:none; padding:8px 8px; cursor:pointer; color: var(--secondary-text-color); font: inherit; font-weight:500; border-bottom: 2px solid transparent; }
 .tab.on { color: var(--primary-text-color); border-bottom-color: var(--thor-accent); }
@@ -3662,7 +3662,8 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .chips.ex { margin-top: 10px; }
 .chip { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:10px; background: var(--secondary-background-color, rgba(127,127,127,.08)); }
 .chip ha-icon { --mdc-icon-size: 20px; color: var(--thor-blue); }
-.chip-l { font-size:.74em; color: var(--secondary-text-color); }
+.chip > div { min-width:0; }
+.chip-l { font-size:.74em; color: var(--secondary-text-color); overflow-wrap:anywhere; hyphens:manual; }
 .chip-v { font-size:.92em; font-weight:500; }
 .bl[text-anchor="start"] { text-anchor:start; } .bl[text-anchor="end"] { text-anchor:end; }
 /* Gauges */
