@@ -55,6 +55,7 @@
 - **Pollen-Verlauf** als Heatmap (7–90 Tage)
 
 **Sonne**
+- **Sonne & Mond** wie bei einer Horizont-Karte: Sonnen- und Mondbahn über den Tag mit Nacht- und Dämmerungsfläche, Auf- und Untergang, Morgen- und Abenddämmerung (bürgerlich, nautisch oder astronomisch), Sonnenhöchststand, Azimut und Höhenwinkel von Sonne ☉ und Mond ☽, Mondaufgang/-untergang, Mondphase mit Bild und Beleuchtung
 - **Sonnenbogen** des Tages mit aktuellem Sonnenstand, Auf- und Untergang, **Tageslänge inkl. Änderung zu gestern**, Sonnenhöchststand mit Höhe, aktuelle Höhe und Azimut (aus dem Standort von Home Assistant berechnet)
 - **UV**: Pyramide plus UV-Kurve des Tages in den WHO-Stufen, **UV-Tagesdosis** (SED) und **Zeit bis zum Sonnenbrand** für Hauttyp I–VI (dein Typ hervorgehoben)
 - **Sonnenstrahlung**: aktuelle W/m², **Klarhimmel-Wert** und **Klarheit** (sonnig / leicht bewölkt / bewölkt / trüb), **Sonnenscheindauer heute** (WMO: ≥ 120 W/m²), **Energie heute** in kWh/m², Tagesmaximum – mit Tagesverlauf gegen die Klarhimmel-Kurve
@@ -221,6 +222,8 @@ image_opacity: 0.55
 | `forecast_hours` / `forecast_days` | `12` / `7` | Länge der stündlichen / täglichen Vorhersage |
 | `show_zambretti`, `show_pressure_chart`, `show_risks`, `show_weather_forecast` | `true` | Bereiche im Reiter *Prognose* |
 | `windrose_metric` | `freq` | Windrose zeigt `freq` (Häufigkeit), `speed` (Geschwindigkeit) oder `bft` (Stärke) |
+| `show_moon_arc` | `true` | Mond im Bereich *Sonne & Mond* |
+| `twilight` | `civil` | Dämmerung: `civil` (bürgerlich, −6°), `nautical` (nautisch, −12°), `astronomical` (astronomisch, −18°) |
 | `show_rose_sun`, `show_rose_moon` | `true` | Sonnen- / Mondposition auf der Windrose |
 | `show_rose_metric_switch`, `show_rose_now` | `true` | Umschalter in der Karte / aktueller Wind über der Rose |
 | `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Farben (Hex) |

@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.8.0";
+const CARD_VERSION = "1.9.0";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -69,6 +69,8 @@ const DEFAULTS = {
   show_rose_now: true,
   show_rose_sun: true,
   show_rose_moon: true,
+  show_moon_arc: true,
+  twilight: "civil", // civil | nautical | astronomical
   // Prognose
   forecast_model: "zambretti", // zambretti | simple
   hemisphere: "auto", // auto | north | south
@@ -223,7 +225,9 @@ const T = {
     risks: "Hinweise", risk: { nfrost: "Frost heute Nacht", pollen: "Pollen", fog: "Nebel", frost: "Frost / Glätte", dew: "Tau", storm: "Sturm", heat: "Hitze", uv: "UV", thunder: "Gewitterneigung", none: "Keine Auffälligkeiten" },
     lvl: ["gering", "möglich", "wahrscheinlich", "hoch"],
     wx_hourly: "Stündlich", wx_daily: "Täglich", wx_from: "Vorhersage von", wx_none: "Keine Vorhersage – Wetter-Entität im Editor wählen (z. B. DWD, Met.no).",
-    sm: { sun: "Sonne", moon: "Mond", el: "Höhe", lit: "beleuchtet", below: "unter dem Horizont", phases: ["Neumond", "zunehmende Sichel", "erstes Viertel", "zunehmender Mond", "Vollmond", "abnehmender Mond", "letztes Viertel", "abnehmende Sichel"] },
+    sm_title: "Sonne & Mond", dawn: "Morgendämmerung", dusk: "Abenddämmerung", noon_s: "Mittag", moonrise: "Mondaufgang", moonset: "Monduntergang", no_event: "heute keiner", height: "Höhenwinkel",
+    tw: { civil: "bürgerlich", nautical: "nautisch", astronomical: "astronomisch" },
+    sm: { sun: "Sonne", moon: "Mond", el: "Höhe", lit: "beleuchtet", below: "unter dem Horizont", phases: ["Neumond", "zunehmende Sichel", "zunehmender Halbmond", "zunehmender Dreiviertelmond", "Vollmond", "abnehmender Dreiviertelmond", "abnehmender Halbmond", "abnehmende Sichel"] },
     rose_now: "Jetzt", rose_metric: { freq: "Häufigkeit", speed: "Geschwindigkeit", bft: "Stärke (Bft)" }, rose_avg_hint: "Ø je Richtung · Linie = Maximum · Deckkraft = Häufigkeit",
     pollen: "Pollenflug", pollen_hist: "Pollen-Verlauf", pollen_top: "Am stärksten", pollen_mine: "deine Allergene", pollen_free: "Heute und in den nächsten Tagen kein Pollenflug.",
     pollen_none: "Keine Pollen-Sensoren gefunden – z. B. die Integration „DWD Pollenflug“ (HACS) installieren oder Sensoren im Editor wählen.",
@@ -318,6 +322,8 @@ const T = {
     risks: "Alerts", risk: { nfrost: "Frost tonight", pollen: "Pollen", fog: "Fog", frost: "Frost / ice", dew: "Dew", storm: "Storm", heat: "Heat", uv: "UV", thunder: "Thunderstorm tendency", none: "Nothing notable" },
     lvl: ["low", "possible", "likely", "high"],
     wx_hourly: "Hourly", wx_daily: "Daily", wx_from: "Forecast from", wx_none: "No forecast – pick a weather entity in the editor (e.g. Met.no).",
+    sm_title: "Sun & moon", dawn: "Dawn", dusk: "Dusk", noon_s: "Noon", moonrise: "Moonrise", moonset: "Moonset", no_event: "none today", height: "Elevation",
+    tw: { civil: "civil", nautical: "nautical", astronomical: "astronomical" },
     sm: { sun: "Sun", moon: "Moon", el: "elevation", lit: "lit", below: "below the horizon", phases: ["New moon", "Waxing crescent", "First quarter", "Waxing gibbous", "Full moon", "Waning gibbous", "Last quarter", "Waning crescent"] },
     rose_now: "Now", rose_metric: { freq: "Frequency", speed: "Speed", bft: "Force (Bft)" }, rose_avg_hint: "Ø per direction · line = maximum · opacity = frequency",
     pollen: "Pollen", pollen_hist: "Pollen history", pollen_top: "Strongest", pollen_mine: "your allergens", pollen_free: "No pollen today or in the next days.",
@@ -691,13 +697,13 @@ function solarPos(t, lat, lon) {
 }
 
 /** Auf-/Untergang und Mittag für den lokalen Tag von t (ms) */
-function sunTimes(t, lat, lon) {
+function sunTimes(t, lat, lon, zen = 90.833) {
   const day = new Date(t);
   day.setHours(12, 0, 0, 0);
   const { decl, eqt } = solarParams(day.getTime());
   const utc0 = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
   const noonMin = 720 - 4 * lon - eqt;
-  const cosH = Math.cos(rad(90.833)) / (Math.cos(rad(lat)) * Math.cos(rad(decl))) - Math.tan(rad(lat)) * Math.tan(rad(decl));
+  const cosH = Math.cos(rad(zen)) / (Math.cos(rad(lat)) * Math.cos(rad(decl))) - Math.tan(rad(lat)) * Math.tan(rad(decl));
   const noon = utc0 + noonMin * 60000;
   if (cosH > 1) return { noon, polar: "night" };
   if (cosH < -1) return { noon, polar: "day" };
@@ -730,6 +736,37 @@ function moonPos(t, lat, lon) {
   const inc = Math.atan2(sdist * Math.sin(ph), dist - sdist * Math.cos(ph));
   const ang = Math.atan2(Math.cos(s.dec) * Math.sin(s.ra - m.ra), Math.sin(s.dec) * Math.cos(m.dec) - Math.cos(s.dec) * Math.sin(m.dec) * Math.cos(s.ra - m.ra));
   return { az: norm360((az * 180) / Math.PI + 180), el: (h * 180) / Math.PI, frac: (1 + Math.cos(inc)) / 2, phase: 0.5 + (0.5 * inc * (ang < 0 ? -1 : 1)) / Math.PI };
+}
+
+/** Phase 0…1 → 0 Neumond … 4 Vollmond … 7 abnehmende Sichel (Viertel und Voll nur nahe am exakten Zeitpunkt) */
+function moonPhaseIdx(p) {
+  const b = [0.0339, 0.216, 0.284, 0.466, 0.534, 0.716, 0.784, 0.966];
+  for (let i = 0; i < b.length; i++) if (p < b[i]) return i;
+  return 0;
+}
+
+/** Mondauf- und -untergang am lokalen Tag (Abtastung + Bisektion, Horizont +0,133°) */
+function moonRiseSet(t, lat, lon) {
+  const d0 = new Date(t).setHours(0, 0, 0, 0);
+  const h0 = 0.133;
+  const f = (tt) => moonPos(tt, lat, lon).el - h0;
+  const out = {};
+  let prevT = d0, prev = f(d0);
+  for (let tt = d0 + 10 * 60000; tt <= d0 + DAY; tt += 10 * 60000) {
+    const v = f(tt);
+    if ((prev < 0) !== (v < 0)) {
+      let a = prevT, b = tt, fa = prev;
+      for (let k = 0; k < 12; k++) {
+        const m = (a + b) / 2, fm = f(m);
+        if ((fa < 0) === (fm < 0)) { a = m; fa = fm; } else b = m;
+      }
+      const x = (a + b) / 2;
+      if (prev < 0 && !out.rise) out.rise = x;
+      if (prev >= 0 && !out.set) out.set = x;
+    }
+    prevT = tt; prev = v;
+  }
+  return out;
 }
 
 /** Klarhimmel-Globalstrahlung nach Haurwitz (W/m²) */
@@ -1121,7 +1158,7 @@ class ThorWeatherCard extends HTMLElement {
     const t = this._t;
     if (!sm.sun && !sm.moon) return "";
     const part = (p, icon, name, extra) => `<span><ha-icon icon="${icon}"></ha-icon>${esc(name)} <b>${Math.round(p.az)}° ${this._cardinal(p.az)}</b> · ${esc(t.sm.el)} ${this._fmt(p.el, 1)}°${p.el < 0 ? ` <span class="muted">(${esc(t.sm.below)})</span>` : ""}${extra || ""}</span>`;
-    const ph = sm.moon ? Math.round(sm.moon.phase * 8) % 8 : 0;
+    const ph = sm.moon ? moonPhaseIdx(sm.moon.phase) : 0;
     return `<div class="rnow smline">
       ${sm.sun ? part(sm.sun, "mdi:white-balance-sunny", t.sm.sun) : ""}
       ${sm.moon ? part(sm.moon, ["mdi:moon-new", "mdi:moon-waxing-crescent", "mdi:moon-first-quarter", "mdi:moon-waxing-gibbous", "mdi:moon-full", "mdi:moon-waning-gibbous", "mdi:moon-last-quarter", "mdi:moon-waning-crescent"][ph], t.sm.moon, ` · ${esc(t.sm.phases[ph])} ${Math.round(sm.moon.frac * 100)} % ${esc(t.sm.lit)}`) : ""}
@@ -3119,52 +3156,82 @@ class ThorWeatherCard extends HTMLElement {
 
   _sunArc() {
     const t = this._t;
+    const c = this._config;
     const loc = this._loc();
     const now = Date.now();
     const pos = this._sunNow();
     if (!loc && !pos) return "";
-    let svg = "", info = [];
-    if (loc) {
-      const st = sunTimes(now, loc.lat, loc.lon);
-      const sy = sunTimes(now - DAY, loc.lat, loc.lon);
-      const W = 320, H = 130, top = 14, hor = 96;
-      const d0 = new Date(now).setHours(0, 0, 0, 0), d1 = d0 + DAY;
-      const X = (tt) => ((tt - d0) / (d1 - d0)) * W;
-      const maxEl = Math.max(10, solarPos(st.noon, loc.lat, loc.lon).el);
-      const minEl = -Math.max(10, Math.min(30, maxEl / 2));
-      const Y = (el) => (el >= 0 ? hor - (el / maxEl) * (hor - top) : hor + (el / minEl) * (H - hor - 4));
-      let d = "", dDay = "";
-      for (let tt = d0; tt <= d1; tt += 10 * 60000) {
-        const el = solarPos(tt, loc.lat, loc.lon).el;
-        d += `${d ? "L" : "M"}${X(tt).toFixed(1)},${Y(el).toFixed(1)} `;
-        if (el >= 0) dDay += `${dDay ? "L" : "M"}${X(tt).toFixed(1)},${Y(el).toFixed(1)} `;
-      }
-      svg += `<defs><linearGradient id="thor-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fcd34d" stop-opacity=".45"/><stop offset="1" stop-color="#fcd34d" stop-opacity="0"/></linearGradient></defs>`;
-      if (st.rise && st.set) svg += `<path d="${dDay} L${X(st.set).toFixed(1)},${hor} L${X(st.rise).toFixed(1)},${hor} Z" fill="url(#thor-sky)"/>`;
-      svg += `<path d="${d}" fill="none" stroke="var(--secondary-text-color)" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>`;
-      if (dDay) svg += `<path d="${dDay}" fill="none" stroke="#f59e0b" stroke-width="2.2"/>`;
-      svg += `<line x1="0" x2="${W}" y1="${hor}" y2="${hor}" class="axis"/>`;
-      for (let h = 0; h <= 24; h += 6) svg += `<text x="${Math.min(W - 8, Math.max(8, (h / 24) * W)).toFixed(1)}" y="${H - 2}" class="bl muted">${String(h).padStart(2, "0")}</text>`;
-      if (st.rise) svg += `<circle cx="${X(st.rise).toFixed(1)}" cy="${hor}" r="2.5" fill="#f59e0b"/>`;
-      if (st.set) svg += `<circle cx="${X(st.set).toFixed(1)}" cy="${hor}" r="2.5" fill="#f97316"/>`;
-      const pe = pos.el;
-      svg += `<circle cx="${X(now).toFixed(1)}" cy="${Y(pe).toFixed(1)}" r="${pe >= 0 ? 8 : 6}" fill="${pe >= 0 ? "#fbbf24" : "#64748b"}" stroke="${pe >= 0 ? "#f59e0b" : "#475569"}" stroke-width="2" ${pe >= 0 ? 'class="sunglow"' : ""}/>`;
-      svg = `<svg viewBox="0 0 ${W} ${H}" class="sunarc">${svg}</svg>`;
-      if (st.rise) {
-        const len = st.set - st.rise;
-        const diff = sy.rise ? len - (sy.set - sy.rise) : NaN;
-        info.push(this._chip("mdi:weather-sunset-up", t.sunrise, this._time(st.rise)));
-        info.push(this._chip("mdi:weather-sunset-down", t.sunset, this._time(st.set)));
-        info.push(this._chip("mdi:timer-sand", t.daylength, `${this._dur(len)}${ok(diff) ? ` (${diff >= 0 ? "+" : "−"}${Math.round(Math.abs(diff) / 60000)} min)` : ""}`));
-      }
-      info.push(this._chip("mdi:weather-sunny", t.noon, `${this._time(st.noon)} · ${this._fmt(maxEl, 1)}°`));
+    if (!loc) {
+      return `<div class="panel"><div class="panel-t">${esc(t.sm_title)}</div><div class="chips ex">
+        ${this._chip("mdi:angle-acute", t.elevation, `${this._fmt(pos.el, 1)}°`, "sun_entity")}
+        ${this._chip("mdi:compass-outline", t.azimuth, `${this._fmt(pos.az, 0)}° · ${this._cardinal(pos.az)}`, "sun_entity")}</div></div>`;
     }
-    if (pos && ok(pos.el)) {
-      info.push(this._chip("mdi:angle-acute", t.elevation, pos.el >= 0 ? `${this._fmt(pos.el, 1)}°` : `${this._fmt(pos.el, 1)}° · ${t.below_horizon}`, "sun_entity"));
-      info.push(this._chip("mdi:compass-outline", t.azimuth, `${this._fmt(pos.az, 0)}° · ${this._cardinal(pos.az)}`, "sun_entity"));
+    const zen = { civil: 96, nautical: 102, astronomical: 108 }[c.twilight] || 96;
+    const twEl = 90 - zen;
+    const st = sunTimes(now, loc.lat, loc.lon);
+    const sy = sunTimes(now - DAY, loc.lat, loc.lon);
+    const tw = sunTimes(now, loc.lat, loc.lon, zen);
+    const showMoon = c.show_moon_arc;
+    const moon = showMoon ? moonPos(now, loc.lat, loc.lon) : null;
+    const mrs = showMoon ? moonRiseSet(now, loc.lat, loc.lon) : {};
+    const d0 = new Date(now).setHours(0, 0, 0, 0), d1 = d0 + DAY;
+    const W = 320, H = 150, top = 30, hor = 96;
+    const X = (tt) => ((tt - d0) / (d1 - d0)) * W;
+    const sunEl = [], moonEl = [];
+    for (let tt = d0; tt <= d1; tt += 10 * 60000) {
+      sunEl.push([tt, solarPos(tt, loc.lat, loc.lon).el]);
+      if (showMoon) moonEl.push([tt, moonPos(tt, loc.lat, loc.lon).el]);
     }
-    return `<div class="panel">${svg}<div class="chips ex">${info.join("")}</div></div>`;
+    const maxUp = Math.max(10, ...sunEl.map((p) => p[1]), ...moonEl.map((p) => p[1]));
+    const maxDn = Math.max(10, ...sunEl.map((p) => -p[1]), ...moonEl.map((p) => -p[1]));
+    const Y = (el) => (el >= 0 ? hor - (el / maxUp) * (hor - top) : hor + (Math.min(-el, maxDn) / maxDn) * (H - hor - 6));
+    const line = (arr, fn = (v) => v) => arr.map(([tt, el], i) => `${i ? "L" : "M"}${X(tt).toFixed(1)},${Y(fn(el)).toFixed(1)}`).join(" ");
+    let svg = "";
+    // Nacht (Sonne unter dem Horizont) dunkel, Dämmerung hell
+    svg += `<path d="M0,${hor} ${line(sunEl, (v) => Math.min(v, 0)).replace(/^M/, "L")} L${W},${hor} Z" fill="#2e3170" opacity=".9"/>`;
+    svg += `<path d="M0,${hor} ${line(sunEl, (v) => (v < 0 ? Math.max(v, twEl) : 0)).replace(/^M/, "L")} L${W},${hor} Z" fill="#93c5fd" opacity=".85"/>`;
+    // Tag
+    svg += `<defs><linearGradient id="thor-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fcd34d" stop-opacity=".45"/><stop offset="1" stop-color="#fcd34d" stop-opacity="0"/></linearGradient></defs>`;
+    svg += `<path d="M0,${hor} ${line(sunEl, (v) => Math.max(v, 0)).replace(/^M/, "L")} L${W},${hor} Z" fill="url(#thor-sky)"/>`;
+    if (showMoon) svg += `<path d="${line(moonEl)}" fill="none" stroke="#9ca3af" stroke-width="1.2" stroke-dasharray="3 3" opacity=".8"/>`;
+    svg += `<path d="${line(sunEl)}" fill="none" stroke="#f59e0b" stroke-width="1.8" opacity=".9"/>`;
+    svg += `<line x1="0" x2="${W}" y1="${hor}" y2="${hor}" class="axis"/>`;
+    // Senkrechte Linien bei Auf- und Untergang
+    for (const tt of [st.rise, st.set]) if (tt) svg += `<line x1="${X(tt).toFixed(1)}" x2="${X(tt).toFixed(1)}" y1="2" y2="${hor}" stroke="var(--divider-color)" stroke-width="1"/>`;
+    for (let h = 0; h <= 24; h += 6) svg += `<text x="${clamp((h / 24) * W, 8, W - 8).toFixed(1)}" y="${H - 1}" class="bl muted">${String(h).padStart(2, "0")}</text>`;
+    // Mond und Sonne jetzt
+    if (moon) {
+      const mx = X(now), my = Y(moon.el);
+      svg += `<g opacity="${moon.el >= 0 ? 1 : 0.55}">${this._moonIcon(+mx.toFixed(1), +my.toFixed(1), 8, moon)}</g>`;
+    }
+    const pe = pos.el;
+    svg += `<circle cx="${X(now).toFixed(1)}" cy="${Y(pe).toFixed(1)}" r="9" fill="${pe >= 0 ? "#fbbf24" : "#64748b"}" stroke="${pe >= 0 ? "#f59e0b" : "#475569"}" stroke-width="2" ${pe >= 0 ? 'class="sunglow"' : ""}/>`;
+    const len = st.rise && st.set ? st.set - st.rise : NaN;
+    const diff = ok(len) && sy.rise ? len - (sy.set - sy.rise) : NaN;
+    const tm = (x) => (x ? this._time(x) : t.no_event);
+    const cell = (label, val, extra = "") => `<div class="smc"><div class="muted small">${esc(label)}</div><div class="smv">${val}</div>${extra}</div>`;
+    const ph = moon ? moonPhaseIdx(moon.phase) : 0;
+    return `<div class="panel">
+      <div class="panel-t row"><span>${esc(t.sm_title)}</span><span class="small muted">${esc(t.daylength)} ${ok(len) ? this._dur(len) : "–"}${ok(diff) ? ` (${diff >= 0 ? "+" : "−"}${Math.round(Math.abs(diff) / 60000)} min)` : ""}</span></div>
+      <div class="smtop">
+        <div style="left:${((X(st.rise || d0 + 6 * HOUR) / W) * 100).toFixed(1)}%">${cell(t.sunrise, tm(st.rise))}</div>
+        <div style="left:${((X(st.set || d0 + 18 * HOUR) / W) * 100).toFixed(1)}%">${cell(t.sunset, tm(st.set))}</div>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" class="sunarc">${svg}</svg>
+      <div class="smgrid">
+        ${cell(`${t.dawn} (${t.tw[c.twilight] || t.tw.civil})`, tm(tw.rise))}
+        ${cell(t.noon_s, `${this._time(st.noon)} <span class="muted small">${this._fmt(solarPos(st.noon, loc.lat, loc.lon).el, 1)}°</span>`)}
+        ${cell(t.dusk, tm(tw.set))}
+        ${cell(t.azimuth, `<span class="sym">☉</span> ${this._fmt(pos.az, 1)}° ${this._cardinal(pos.az)}${moon ? `<br><span class="sym">☽</span> ${this._fmt(moon.az, 1)}° ${this._cardinal(moon.az)}` : ""}`)}
+        <div></div>
+        ${cell(t.height, `<span class="sym">☉</span> ${this._fmt(pos.el, 1)}°${moon ? `<br><span class="sym">☽</span> ${this._fmt(moon.el, 1)}°` : ""}`)}
+        ${moon ? cell(t.moonrise, tm(mrs.rise)) : ""}
+        ${moon ? `<div class="smc"><svg viewBox="-12 -12 24 24" class="mphase">${this._moonIcon(0, 0, 10, moon)}</svg><div class="small">${esc(t.sm.phases[ph])}</div><div class="muted small">${Math.round(moon.frac * 100)} % ${esc(t.sm.lit)}</div></div>` : ""}
+        ${moon ? cell(t.moonset, tm(mrs.set)) : ""}
+      </div>
+    </div>`;
   }
+
 
   _uvSun() {
     const t = this._t;
@@ -4214,6 +4281,13 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .bm { display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:1px; }
 /* Sonne */
 .sunarc { width:100%; height:auto; display:block; }
+.smtop { position:relative; height:44px; }
+.smtop > div { position:absolute; transform:translateX(-50%); top:0; }
+.smgrid { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px 6px; margin-top:6px; text-align:center; }
+.smc { display:flex; flex-direction:column; align-items:center; gap:1px; }
+.smv { font-size:1.05em; font-weight:500; line-height:1.3; }
+.sym { color: var(--secondary-text-color); }
+.mphase { width:30px; height:30px; }
 .sunglow { filter: drop-shadow(0 0 5px rgba(251,191,36,.9)); }
 .skins { display:grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap:5px; }
 .skin { display:flex; align-items:center; gap:5px; border:1px solid var(--divider-color); border-radius:8px; padding:4px 6px; font-size:.8em; }
@@ -4246,11 +4320,11 @@ const ED = {
       wind_dir_avg_hour_entity: "Richtung Stundenmittel", wind_dir_avg_day_entity: "Richtung Tagesmittel", wind_dir_avg_month_entity: "Richtung Monatsmittel", wind_dir_avg_year_entity: "Richtung Jahresmittel",
       wind_speed_avg_hour_entity: "Geschw. Stundenmittel", wind_speed_avg_day_entity: "Geschw. Tagesmittel", wind_speed_avg_month_entity: "Geschw. Monatsmittel", wind_speed_avg_year_entity: "Geschw. Jahresmittel",
       uv_entity: "UV-Index", radiation_entity: "Sonnenstrahlung (W/m²)", illuminance_entity: "Helligkeit (lx)", sun_entity: "Sonnen-Entität",
-      show_sun_arc: "Sonnenbogen & Tageslänge", show_sun_uv: "UV-Kurve, Dosis & Sonnenbrandzeit", show_radiation: "Strahlung & Sonnenschein", show_sun_chart: "Sonnenstunden je Tag",
+      show_sun_arc: "Sonne & Mond (Bogen, Dämmerung, Mondauf-/-untergang)", show_sun_uv: "UV-Kurve, Dosis & Sonnenbrandzeit", show_radiation: "Strahlung & Sonnenschein", show_sun_chart: "Sonnenstunden je Tag",
       skin_type: "Hauttyp", sunshine_threshold: "Sonnenschein ab",
       title: "Titel", icon: "Symbol", show_header: "Kopfzeile", layout: "Layout", default_tab: "Start-Reiter", tabs: "Reiter / Abschnitte", language: "Sprache",
       show_hero: "Übersicht (Jetzt)", show_gauges: "Zeigerinstrumente", show_temps: "Temperatur-Kacheln", show_uv: "UV-Pyramide",
-      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", windrose_metric: "Windrose: Darstellung", show_rose_metric_switch: "Windrose: Umschalter Häufigkeit/Geschw./Stärke", show_rose_now: "Windrose: aktueller Wind", show_rose_sun: "Windrose: Sonnenposition", show_rose_moon: "Windrose: Mondposition",
+      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", windrose_metric: "Windrose: Darstellung", show_rose_metric_switch: "Windrose: Umschalter Häufigkeit/Geschw./Stärke", show_rose_now: "Windrose: aktueller Wind", show_moon_arc: "Sonne & Mond: Mond anzeigen", twilight: "Dämmerung", show_rose_sun: "Windrose: Sonnenposition", show_rose_moon: "Windrose: Mondposition",
       weather_entity: "Wetter-Entität (Vorhersage)", forecast_model: "Prognosemodell", hemisphere: "Halbkugel", forecast_hours: "Stunden in der Vorhersage", forecast_days: "Tage in der Vorhersage",
       show_zambretti: "Lokale Prognose (Zambretti)", show_pressure_chart: "Luftdruck-Trend", show_risks: "Hinweise (Nebel, Frost, Sturm …)", show_weather_forecast: "Vorhersage der Wetter-Entität",
       show_season: "Jahreszeit (Reiter Jahr)", show_season_chip: "Jahreszeit in der Übersicht", show_bft_scale: "Beaufort-Säulen (Wind & Böen)", season_type: "Jahreszeit zählt",
@@ -4301,6 +4375,7 @@ const ED = {
     opts: {
       climate: "Klima", air: "Lüften & Schimmel", home: "Haus & Garten",
       tabs: "Reiter", stack: "Untereinander", now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr",
+      tw_civil: "Bürgerlich (−6°)", tw_naut: "Nautisch (−12°)", tw_astro: "Astronomisch (−18°)",
       s_meteo: "Meteorologisch (1. März, 1. Juni …)", s_astro: "Astronomisch (Tagundnachtgleiche, Sonnenwende)",
       p_ppm: "Pollen/m³", p_city: "Stadt", p_rural: "Land", pollen: "Pollen",
       wind_m: "Mittelwind", gust_m: "Böen", m_freq: "Häufigkeit", m_speed: "Geschwindigkeit", m_bft: "Stärke (Beaufort)", forecast: "Prognose",
@@ -4319,11 +4394,11 @@ const ED = {
       wind_dir_avg_hour_entity: "Direction hourly mean", wind_dir_avg_day_entity: "Direction daily mean", wind_dir_avg_month_entity: "Direction monthly mean", wind_dir_avg_year_entity: "Direction yearly mean",
       wind_speed_avg_hour_entity: "Speed hourly mean", wind_speed_avg_day_entity: "Speed daily mean", wind_speed_avg_month_entity: "Speed monthly mean", wind_speed_avg_year_entity: "Speed yearly mean",
       uv_entity: "UV index", radiation_entity: "Solar radiation (W/m²)", illuminance_entity: "Illuminance (lx)", sun_entity: "Sun entity",
-      show_sun_arc: "Sun arc & day length", show_sun_uv: "UV curve, dose & sunburn time", show_radiation: "Radiation & sunshine", show_sun_chart: "Sunshine hours per day",
+      show_sun_arc: "Sun & moon (arc, twilight, moonrise/-set)", show_sun_uv: "UV curve, dose & sunburn time", show_radiation: "Radiation & sunshine", show_sun_chart: "Sunshine hours per day",
       skin_type: "Skin type", sunshine_threshold: "Sunshine from",
       title: "Title", icon: "Icon", show_header: "Header", layout: "Layout", default_tab: "Start tab", tabs: "Tabs / sections", language: "Language",
       show_hero: "Overview (now)", show_gauges: "Dial gauges", show_temps: "Temperature tiles", show_uv: "UV pyramid",
-      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", windrose_metric: "Wind rose: display", show_rose_metric_switch: "Wind rose: frequency/speed/force switch", show_rose_now: "Wind rose: current wind", show_rose_sun: "Wind rose: sun position", show_rose_moon: "Wind rose: moon position",
+      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", windrose_metric: "Wind rose: display", show_rose_metric_switch: "Wind rose: frequency/speed/force switch", show_rose_now: "Wind rose: current wind", show_moon_arc: "Sun & moon: show moon", twilight: "Twilight", show_rose_sun: "Wind rose: sun position", show_rose_moon: "Wind rose: moon position",
       weather_entity: "Weather entity (forecast)", forecast_model: "Forecast model", hemisphere: "Hemisphere", forecast_hours: "Hours in forecast", forecast_days: "Days in forecast",
       show_zambretti: "Local forecast (Zambretti)", show_pressure_chart: "Pressure trend", show_risks: "Alerts (fog, frost, storm …)", show_weather_forecast: "Weather entity forecast",
       show_season: "Season (Year tab)", show_season_chip: "Season in overview", show_bft_scale: "Beaufort columns (wind & gusts)", season_type: "Season counts",
@@ -4374,6 +4449,7 @@ const ED = {
     opts: {
       climate: "Climate", air: "Airing & mould", home: "Home & garden",
       tabs: "Tabs", stack: "Stacked", now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year",
+      tw_civil: "Civil (−6°)", tw_naut: "Nautical (−12°)", tw_astro: "Astronomical (−18°)",
       s_meteo: "Meteorological (1 March, 1 June …)", s_astro: "Astronomical (equinox, solstice)",
       p_ppm: "Grains/m³", p_city: "Town", p_rural: "Countryside", pollen: "Pollen",
       wind_m: "Mean wind", gust_m: "Gusts", m_freq: "Frequency", m_speed: "Speed", m_bft: "Force (Beaufort)", forecast: "Forecast",
@@ -4443,6 +4519,7 @@ class ThorWeatherCardEditor extends HTMLElement {
       sec("sun", "mdi:sun-wireless", [
         grid([{ name: "uv_entity", selector: ent() }, { name: "radiation_entity", selector: ent() }]),
         grid([{ name: "illuminance_entity", selector: ent() }, { name: "sun_entity", selector: { entity: { domain: "sun" } } }]),
+        { name: "twilight", selector: sel([["civil", o.tw_civil], ["nautical", o.tw_naut], ["astronomical", o.tw_astro]]) },
         grid([
           { name: "skin_type", selector: sel(o.skins.map((l, i) => [String(i + 1), l])) },
           { name: "sunshine_threshold", selector: n(10, 400, 10, "W/m²") },
@@ -4512,6 +4589,7 @@ class ThorWeatherCardEditor extends HTMLElement {
           { name: "show_gust_chart", selector: bool }, { name: "show_rose_now", selector: bool },
           { name: "show_rose_metric_switch", selector: bool },
           { name: "show_rose_sun", selector: bool }, { name: "show_rose_moon", selector: bool },
+          { name: "show_moon_arc", selector: bool },
           { name: "show_sun_arc", selector: bool }, { name: "show_sun_uv", selector: bool },
           { name: "show_radiation", selector: bool }, { name: "show_sun_chart", selector: bool },
           { name: "show_rain", selector: bool }, { name: "show_rain_chart", selector: bool },

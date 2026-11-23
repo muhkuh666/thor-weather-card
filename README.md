@@ -55,6 +55,7 @@
 - **Pollen history** as a heatmap (7–90 days)
 
 **Sun**
+- **Sun & moon** like a horizon card: sun and moon path over the day with night and twilight shading, sunrise/sunset, dawn and dusk (civil, nautical or astronomical), solar noon, azimuth and elevation of sun ☉ and moon ☽, moonrise/moonset, moon phase with picture and illumination
 - **Sun arc** of the day with the current sun position, sunrise, sunset, **day length incl. change vs. yesterday**, solar noon with maximum elevation, elevation and azimuth (computed from your Home Assistant location)
 - **UV**: pyramid plus today's UV curve in the WHO bands, **daily UV dose** (SED) and **time until sunburn** for skin types I–VI (your type highlighted)
 - **Solar radiation**: current W/m², **clear-sky value** and **clearness** (sunny / partly cloudy / cloudy / overcast), **sunshine duration today** (WMO: ≥ 120 W/m²), **energy today** in kWh/m², daily max – with a daily curve against the clear-sky curve
@@ -221,6 +222,8 @@ image_opacity: 0.55
 | `forecast_hours` / `forecast_days` | `12` / `7` | Length of the hourly / daily forecast |
 | `show_zambretti`, `show_pressure_chart`, `show_risks`, `show_weather_forecast` | `true` | Sections of the *Forecast* tab |
 | `windrose_metric` | `freq` | Wind rose shows `freq` (frequency), `speed` or `bft` (force) |
+| `show_moon_arc` | `true` | Moon in the *Sun & moon* panel |
+| `twilight` | `civil` | Dawn/dusk: `civil` (−6°), `nautical` (−12°), `astronomical` (−18°) |
 | `show_rose_sun`, `show_rose_moon` | `true` | Sun / moon position on the wind rose |
 | `show_rose_metric_switch`, `show_rose_now` | `true` | Switch in the card / current wind above the rose |
 | `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Colours (hex) |
