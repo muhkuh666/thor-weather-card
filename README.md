@@ -21,6 +21,12 @@
 - **Feels-like and dew point are computed** automatically (wind chill / heat index, Magnus formula) if you don't have sensors for them
 - **UV pyramid** in WHO colours with risk level, protection tip and daily maximum
 
+**Forecast**
+- **Local forecast with the Zambretti model** (Negretti & Zambra): pressure, 3‑hour trend, wind direction and season give one of 26 forecasts from *A – Settled fine* to *Z – Stormy, much rain*, with scale and all inputs shown; also used in the overview
+- **Pressure chart 24 h with trend** extrapolated 6 hours ahead
+- **Alerts**: fog, frost / black ice, dew, storm (gusts or rapid pressure fall), thunderstorm tendency, heat and UV – each with level and the values behind it
+- Optional **forecast of a weather entity** (e.g. Met.no, DWD): hourly and daily with temperature, precipitation, probability and wind
+
 **Sun**
 - **Sun arc** of the day with the current sun position, sunrise, sunset, **day length incl. change vs. yesterday**, solar noon with maximum elevation, elevation and azimuth (computed from your Home Assistant location)
 - **UV**: pyramid plus today's UV curve in the WHO bands, **daily UV dose** (SED) and **time until sunburn** for skin types I–VI (your type highlighted)
@@ -33,7 +39,8 @@
 - **Wind and gusts clearly separated**: comparison bars mean wind vs. gusts, **gustiness** (steady … very gusty) with gust factor, gusts in the compass and in the overview
 - **Wind & gusts chart (24 h)**: 10‑minute mean wind as area, 10‑minute max gust as line, Beaufort axis, peak gust marked
 - **Direction means for hour, day, month and year** (vector mean, not the wrong arithmetic mean) plus **prevailing direction** and **steadiness**
-- **Wind rose** with 16 sectors stacked by Beaufort class, calm percentage in the centre, selectable periods (1 h … 30 days) and switchable between **mean wind and gusts**
+- **Wind rose** switchable in the card between **frequency**, **speed** and **force (Beaufort)** – speed/force show the mean per direction, the maximum as an arc and the frequency as opacity; current wind, gusts and Beaufort always shown above the rose
+- 16 sectors stacked by Beaufort class, calm percentage in the centre, selectable periods (1 h … 30 days) and switchable between **mean wind and gusts**
 - Optional **house image** behind compass and wind rose – same options as the [Helios Compass Card](https://github.com/muhkuh666/helios-compass-card)
 - Wind values list: degrees, Beaufort, km/h · m/s · knots · mph, gusts, max gust in 24 h, average speeds
 - Wind unit selectable: as sensor, km/h, m/s, kn, mph or Beaufort
@@ -54,15 +61,16 @@
 - The last selection is remembered per chart
 
 **General**
-- Tabs (*Now · Sun · Wind · Rain · Year*) or everything stacked, each section can be switched off
+- Tabs (*Now · Forecast · Sun · Wind · Rain · Year*)
+- **Every option** can be set in the visual editor, incl. colours (accent, wind, gusts, needle) or everything stacked, each section can be switched off
 - Fully configurable in the **visual card editor**, German and English, light & dark themes
 - Click any value to open the Home Assistant *more info* dialog
 
 ## Screenshots
 
-| Now | Sun | Wind | Rain | Year |
-|---|---|---|---|---|
-| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
+| Now | Forecast | Sun | Wind | Rain | Year |
+|---|---|---|---|---|---|
+| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/forecast.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
 
 ## Installation
 
@@ -148,7 +156,7 @@ image_opacity: 0.55
 | Option | Default | Description |
 |---|---|---|
 | `layout` | `tabs` | `tabs` or `stack` (all sections one after another) |
-| `tabs` | `[now, sun, wind, rain, year]` | Which tabs/sections and in which order |
+| `tabs` | `[now, forecast, sun, wind, rain, year]` | Which tabs/sections and in which order |
 | `default_tab` | `now` | Tab shown first |
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Switch individual sections on/off |
 | `minmax_mode` | `24h` | Min/max over the last 24 h or `today` (since midnight) |
@@ -157,6 +165,14 @@ image_opacity: 0.55
 | `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, 1y]` | Period buttons of the wind & gusts chart |
 | `rain_periods` / `sun_periods` | `[7d, 14d, 30d, 1y, summer, winter]` | Period buttons of the precipitation / sunshine chart |
 | `windrose_default`, `wind_chart_default`, `rain_default`, `sun_default` | `24h`, `24h`, `14d`, `14d` | Period shown first (the last choice is remembered in the browser) |
+| `weather_entity` | | Weather entity whose forecast is shown in the *Forecast* tab |
+| `forecast_model` | `zambretti` | `zambretti` or `simple` (pressure + trend only) |
+| `hemisphere` | `auto` | `auto` (from location), `north`, `south` – for Zambretti |
+| `forecast_hours` / `forecast_days` | `12` / `7` | Length of the hourly / daily forecast |
+| `show_zambretti`, `show_pressure_chart`, `show_risks`, `show_weather_forecast` | `true` | Sections of the *Forecast* tab |
+| `windrose_metric` | `freq` | Wind rose shows `freq` (frequency), `speed` or `bft` (force) |
+| `show_rose_metric_switch`, `show_rose_now` | `true` | Switch in the card / current wind above the rose |
+| `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Colours (hex) |
 | `windrose_mode` | `wind` | Wind rose by `wind` (mean wind) or `gust` |
 | `skin_type` | `2` | Skin type I–VI (1–6) for the sunburn time |
 | `sunshine_threshold` | `120` | W/m² from which it counts as sunshine (WMO) |

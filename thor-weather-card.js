@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.3.0";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -51,7 +51,7 @@ const DEFAULTS = {
   show_header: true,
   layout: "tabs", // tabs | stack
   default_tab: "now", // now | wind | rain | year
-  tabs: ["now", "sun", "wind", "rain", "year"],
+  tabs: ["now", "forecast", "sun", "wind", "rain", "year"],
   language: "auto",
   // Bereiche
   show_hero: true,
@@ -64,6 +64,24 @@ const DEFAULTS = {
   show_wind_values: true,
   show_gust_chart: true,
   windrose_mode: "wind", // wind | gust
+  windrose_metric: "freq", // freq | speed | bft
+  show_rose_metric_switch: true,
+  show_rose_now: true,
+  // Prognose
+  forecast_model: "zambretti", // zambretti | simple
+  hemisphere: "auto", // auto | north | south
+  weather_entity: "",
+  show_zambretti: true,
+  show_pressure_chart: true,
+  show_risks: true,
+  show_weather_forecast: true,
+  forecast_hours: 12,
+  forecast_days: 7,
+  // Farben
+  accent_color: "#f5a623",
+  wind_color: "#3b8fd9",
+  gust_color: "#e8590c",
+  needle_color: "#e8735a",
   show_sun_arc: true,
   show_sun_uv: true,
   show_radiation: true,
@@ -100,7 +118,7 @@ const DEFAULTS = {
 
 const ENTITY_KEYS = Object.keys(DEFAULTS).filter((k) => k.endsWith("_entity"));
 const HIST_KEYS = ENTITY_KEYS.filter((k) => k !== "sun_entity");
-const ALL_TABS = ["now", "sun", "wind", "rain", "year"];
+const ALL_TABS = ["now", "forecast", "sun", "wind", "rain", "year"];
 const LUX_TO_WM2 = 0.0079; // Näherung Sonnenlicht: 1 W/m² ≈ 127 lx
 const MED = [200, 250, 300, 450, 600, 1000]; // minimale Erythemdosis J/m² je Hauttyp I–VI
 // Zeiträume wie bei der Helios Compass Card: kurz = Verlauf, ab 7 Tagen = Langzeitstatistik
@@ -123,7 +141,18 @@ const T = {
     r: { today: "Heute", "1h": "1 Std.", "3h": "3 Std.", "8h": "8 Std.", "12h": "12 Std.", "24h": "24 Std.", "3d": "3 Tage", "7d": "7 Tage", "14d": "14 Tage", "30d": "30 Tage", "1y": "1 Jahr", summer: "Sommer", winter: "Winter" },
     r_desc: { summer: "Apr–Sep, letzte 12 Monate", winter: "Okt–Mär, letzte 12 Monate", "1y": "letzte 12 Monate" },
     wind_chart: "Wind & Böen",
-    tabs: { now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr" },
+    z: ["Beständig schön", "Schönes Wetter", "Wird schön", "Schön, wird unbeständiger", "Schön, vereinzelt Schauer", "Recht schön, Besserung", "Recht schön, anfangs Schauer möglich", "Recht schön, später Schauer",
+      "Anfangs Schauer, dann Besserung", "Wechselhaft, Besserung", "Recht schön, Schauer wahrscheinlich", "Eher unbeständig, später aufklarend", "Unbeständig, wahrscheinlich Besserung", "Schauer mit Aufheiterungen",
+      "Schauer, wird unbeständiger", "Wechselhaft, etwas Regen", "Unbeständig, kurze schöne Abschnitte", "Unbeständig, später Regen", "Unbeständig, etwas Regen", "Meist sehr unbeständig",
+      "Zeitweise Regen, Verschlechterung", "Zeitweise Regen, sehr unbeständig", "Häufig Regen", "Regen, sehr unbeständig", "Stürmisch, evtl. Besserung", "Stürmisch, viel Regen"],
+    fc_title: "Lokale Prognose", fc_model: "Modell", fc_next: "für die nächsten ~12 Stunden", fc_inputs: "Eingangswerte", season: "Jahreszeit", season_s: "Sommerhalbjahr", season_w: "Winterhalbjahr",
+    wind_corr: "Windkorrektur", trend3h: "Tendenz 3 h", fc_need: "Für die Prognose wird ein Luftdruck-Sensor gebraucht.",
+    press_chart: "Luftdruck – 24 h & Trend", press_extra: "Trend +6 h",
+    risks: "Hinweise", risk: { fog: "Nebel", frost: "Frost / Glätte", dew: "Tau", storm: "Sturm", heat: "Hitze", uv: "UV", thunder: "Gewitterneigung", none: "Keine Auffälligkeiten" },
+    lvl: ["gering", "möglich", "wahrscheinlich", "hoch"],
+    wx_hourly: "Stündlich", wx_daily: "Täglich", wx_from: "Vorhersage von", wx_none: "Keine Vorhersage – Wetter-Entität im Editor wählen (z. B. DWD, Met.no).",
+    rose_now: "Jetzt", rose_metric: { freq: "Häufigkeit", speed: "Geschwindigkeit", bft: "Stärke (Bft)" }, rose_avg_hint: "Ø je Richtung · Linie = Maximum · Deckkraft = Häufigkeit",
+    tabs: { now: "Jetzt", forecast: "Prognose", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr" },
     sunrise: "Aufgang", sunset: "Untergang", daylength: "Tageslänge", noon: "Sonnenhöchststand", elevation: "Höhe", azimuth: "Azimut",
     vs_yesterday: "zu gestern", below_horizon: "Nacht", next_rise: "Nächster Aufgang",
     uv_curve: "UV heute", uv_dose: "UV-Dosis heute", sed: "SED", burn: "Sonnenbrand nach (ungeschützt)", skin: "Hauttyp", no_burn: "kein Risiko",
@@ -169,7 +198,18 @@ const T = {
     r: { today: "Today", "1h": "1 hr", "3h": "3 hrs", "8h": "8 hrs", "12h": "12 hrs", "24h": "24 hrs", "3d": "3 days", "7d": "7 days", "14d": "14 days", "30d": "30 days", "1y": "1 year", summer: "Summer", winter: "Winter" },
     r_desc: { summer: "Apr–Sep, last 12 months", winter: "Oct–Mar, last 12 months", "1y": "last 12 months" },
     wind_chart: "Wind & gusts",
-    tabs: { now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year" },
+    z: ["Settled fine", "Fine weather", "Becoming fine", "Fine, becoming less settled", "Fine, possible showers", "Fairly fine, improving", "Fairly fine, possible showers early", "Fairly fine, showery later",
+      "Showery early, improving", "Changeable, mending", "Fairly fine, showers likely", "Rather unsettled, clearing later", "Unsettled, probably improving", "Showery, bright intervals",
+      "Showery, becoming less settled", "Changeable, some rain", "Unsettled, short fine intervals", "Unsettled, rain later", "Unsettled, some rain", "Mostly very unsettled",
+      "Occasional rain, worsening", "Rain at times, very unsettled", "Rain at frequent intervals", "Rain, very unsettled", "Stormy, may improve", "Stormy, much rain"],
+    fc_title: "Local forecast", fc_model: "Model", fc_next: "for the next ~12 hours", fc_inputs: "Inputs", season: "Season", season_s: "summer half", season_w: "winter half",
+    wind_corr: "Wind correction", trend3h: "Trend 3 h", fc_need: "The forecast needs a pressure sensor.",
+    press_chart: "Pressure – 24 h & trend", press_extra: "trend +6 h",
+    risks: "Alerts", risk: { fog: "Fog", frost: "Frost / ice", dew: "Dew", storm: "Storm", heat: "Heat", uv: "UV", thunder: "Thunderstorm tendency", none: "Nothing notable" },
+    lvl: ["low", "possible", "likely", "high"],
+    wx_hourly: "Hourly", wx_daily: "Daily", wx_from: "Forecast from", wx_none: "No forecast – pick a weather entity in the editor (e.g. Met.no).",
+    rose_now: "Now", rose_metric: { freq: "Frequency", speed: "Speed", bft: "Force (Bft)" }, rose_avg_hint: "Ø per direction · line = maximum · opacity = frequency",
+    tabs: { now: "Now", forecast: "Forecast", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year" },
     sunrise: "Sunrise", sunset: "Sunset", daylength: "Day length", noon: "Solar noon", elevation: "Elevation", azimuth: "Azimuth",
     vs_yesterday: "vs. yesterday", below_horizon: "night", next_rise: "Next sunrise",
     uv_curve: "UV today", uv_dose: "UV dose today", sed: "SED", burn: "Sunburn after (unprotected)", skin: "Skin type", no_burn: "no risk",
@@ -335,6 +375,7 @@ function windStats(dirPts, spdPts, start, end) {
   const segs = stepSegments(dirPts, start, end);
   const sectors = Array.from({ length: 16 }, () => new Array(ROSE_CLASSES.length).fill(0));
   let sx = 0, sy = 0, tot = 0, calm = 0, spdSum = 0, spdW = 0;
+  const ss = new Array(16).fill(0), sw = new Array(16).fill(0), smx = new Array(16).fill(NaN);
   let j = 0; // Zeiger in spdPts: erster Punkt mit t > aktueller Zeit
   for (const s of segs) {
     // Segment an Geschwindigkeits-Wechseln aufteilen
@@ -354,6 +395,7 @@ function windStats(dirPts, spdPts, start, end) {
         let cls = ok(sp) ? ROSE_CLASSES.length - 1 - [...ROSE_CLASSES].reverse().findIndex((l) => sp >= l) : 0;
         if (cls >= ROSE_CLASSES.length || cls < 0) cls = 0;
         sectors[sec][cls] += w;
+        if (ok(sp)) { ss[sec] += sp * w; sw[sec] += w; smx[sec] = ok(smx[sec]) ? Math.max(smx[sec], sp) : sp; }
       }
       t = next;
     }
@@ -371,6 +413,7 @@ function windStats(dirPts, spdPts, start, end) {
     secPct: secTot.map((v) => (v / tot) * 100),
     mean, R, top: secTot[top] > 0 ? top : -1,
     avgSpeed: spdW ? spdSum / spdW : NaN,
+    secAvg: ss.map((v, i) => (sw[i] ? v / sw[i] : NaN)), secMax: smx,
   };
 }
 
@@ -379,6 +422,7 @@ function roseFromHourly(dirRows, spdRows, from, months) {
   const spdBy = new Map((spdRows || []).map((r) => [r.start, r.mean]));
   const sectors = Array.from({ length: 16 }, () => new Array(ROSE_CLASSES.length).fill(0));
   let sx = 0, sy = 0, tot = 0, calm = 0, moving = 0, spdSum = 0, spdN = 0;
+  const ss = new Array(16).fill(0), sn = new Array(16).fill(0), smx = new Array(16).fill(NaN);
   for (const r of dirRows || []) {
     if (r.start < from || !inMonths(r.start, months) || !ok(r.mean)) continue;
     const sp = spdBy.get(r.start);
@@ -389,7 +433,9 @@ function roseFromHourly(dirRows, spdRows, from, months) {
     sx += Math.sin(rad(r.mean)); sy += Math.cos(rad(r.mean));
     let cls = 0;
     if (ok(sp)) for (let i = 0; i < ROSE_CLASSES.length; i++) if (sp >= ROSE_CLASSES[i]) cls = i;
-    sectors[Math.round(norm360(r.mean) / 22.5) % 16][cls]++;
+    const sec = Math.round(norm360(r.mean) / 22.5) % 16;
+    sectors[sec][cls]++;
+    if (ok(sp)) { ss[sec] += sp; sn[sec]++; smx[sec] = ok(smx[sec]) ? Math.max(smx[sec], sp) : sp; }
   }
   if (!tot) return null;
   const secTot = sectors.map((c) => c.reduce((a, b) => a + b, 0));
@@ -400,6 +446,7 @@ function roseFromHourly(dirRows, spdRows, from, months) {
     secPct: secTot.map((v) => (v / tot) * 100),
     mean: moving ? norm360((Math.atan2(sx, sy) * 180) / Math.PI) : NaN, R: moving ? Math.hypot(sx, sy) / moving : NaN,
     top: secTot[top] > 0 ? top : -1, avgSpeed: spdN ? spdSum / spdN : NaN,
+    secAvg: ss.map((v, i) => (sn[i] ? v / sn[i] : NaN)), secMax: smx,
   };
 }
 
@@ -436,6 +483,39 @@ function minMax(points, start, end, live) {
   if (live && ok(live.v)) consider(live.t, live.v);
   return { min: mn, max: mx };
 }
+
+/* ------------------------------------------------------------ Zambretti */
+
+// Negretti & Zambra (1915), Umsetzung nach dem bekannten „beteljuice“-Algorithmus
+const Z_WIND = { N: 6, NNE: 5, NE: 5, ENE: 2, E: -0.5, ESE: -2, SE: -5, SSE: -8.5, S: -12, SSW: -10, SW: -6, WSW: -4.5, W: -3, WNW: -0.5, NW: 1.5, NNW: 3 };
+const Z_RISE = [25, 25, 25, 24, 24, 19, 16, 12, 11, 9, 8, 6, 5, 2, 1, 1, 0, 0, 0, 0, 0, 0];
+const Z_STEADY = [25, 25, 25, 25, 25, 25, 23, 23, 22, 18, 15, 13, 10, 4, 1, 1, 0, 0, 0, 0, 0, 0];
+const Z_FALL = [25, 25, 25, 25, 25, 25, 25, 25, 23, 23, 21, 20, 17, 14, 7, 3, 1, 1, 1, 0, 0, 0];
+const Z_ICON = (i) => (i <= 1 ? "mdi:weather-sunny" : i <= 5 ? "mdi:weather-partly-cloudy" : i <= 14 ? "mdi:weather-partly-rainy" : i <= 21 ? "mdi:weather-rainy" : i <= 23 ? "mdi:weather-pouring" : "mdi:weather-lightning-rainy");
+
+/** p = Luftdruck auf Meereshöhe (hPa), trend = 1 steigt, 2 fällt, 0 gleich; dir in Grad oder NaN */
+function zambretti(p, trend, dir, month, south) {
+  const top = 1050, bottom = 950, range = top - bottom, k = range / 22;
+  let z = p;
+  if (ok(dir)) {
+    const d = south ? norm360(dir + 180) : dir;
+    z += (Z_WIND[CARD_EN[Math.round(norm360(d) / 22.5) % 16]] / 100) * range;
+  }
+  const summer = south ? month >= 10 || month <= 3 : month >= 4 && month <= 9;
+  if (summer) z += trend === 1 ? (7 / 100) * range : trend === 2 ? -(7 / 100) * range : 0;
+  if (z >= top) z = top - 1;
+  const opt = clamp(Math.floor((z - bottom) / k), 0, 21);
+  const idx = (trend === 1 ? Z_RISE : trend === 2 ? Z_FALL : Z_STEADY)[opt];
+  return { idx, letter: String.fromCharCode(65 + idx), opt, summer, adjusted: z };
+}
+
+const hexToRgb = (h) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(h || "").trim());
+  return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null;
+};
+const rgbToHex = (a) => "#" + a.map((v) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, "0")).join("");
+const COLOR_KEYS = ["accent_color", "wind_color", "gust_color", "needle_color"];
+const WX_ICON = { "clear-night": "mdi:weather-night", cloudy: "mdi:weather-cloudy", exceptional: "mdi:alert-circle-outline", fog: "mdi:weather-fog", hail: "mdi:weather-hail", lightning: "mdi:weather-lightning", "lightning-rainy": "mdi:weather-lightning-rainy", partlycloudy: "mdi:weather-partly-cloudy", pouring: "mdi:weather-pouring", rainy: "mdi:weather-rainy", snowy: "mdi:weather-snowy", "snowy-rainy": "mdi:weather-snowy-rainy", sunny: "mdi:weather-sunny", windy: "mdi:weather-windy", "windy-variant": "mdi:weather-windy-variant" };
 
 /* ------------------------------------------------------ Sonnenstand (NOAA) */
 
@@ -497,6 +577,10 @@ class ThorWeatherCard extends HTMLElement {
     this._tab = null;
     this._sel = {};
     this._roseMode = null;
+    this._roseMetric = null;
+    this._fc = {};
+    this._fcUnsubs = [];
+    this._fcFor = null;
     this._hist = {};
     this._daily = null;
     this._hourly = null;
@@ -558,6 +642,13 @@ class ThorWeatherCard extends HTMLElement {
       this._sel[sel] = !defChanged && c[list].includes(cur) ? cur : c[list].includes(c[def]) ? c[def] : c[list][Math.min(2, c[list].length - 1)];
     }
     if (!this._roseMode || (old && old.windrose_mode !== c.windrose_mode)) this._roseMode = c.windrose_mode === "gust" ? "gust" : "wind";
+    if (!this._roseMetric || (old && old.windrose_metric !== c.windrose_metric)) {
+      const m = !old ? this._load("rmetric") : null;
+      this._roseMetric = c.show_rose_metric_switch && ["freq", "speed", "bft"].includes(m) ? m : ["freq", "speed", "bft"].includes(c.windrose_metric) ? c.windrose_metric : "freq";
+    }
+    for (const k of COLOR_KEYS) if (!hexToRgb(c[k])) c[k] = DEFAULTS[k];
+    c.forecast_hours = clamp(Math.round(num(c.forecast_hours) || 12), 4, 48);
+    c.forecast_days = clamp(Math.round(num(c.forecast_days) || 7), 2, 14);
     const entChanged = !old || ENTITY_KEYS.some((k) => old[k] !== c[k]);
     if (entChanged) {
       this._hist = {};
@@ -574,6 +665,7 @@ class ThorWeatherCard extends HTMLElement {
     const first = !this._hass;
     this._hass = hass;
     if (!this._config) return;
+    this._subscribeForecast();
     if (first) {
       this._render();
       this._fetch();
@@ -595,10 +687,38 @@ class ThorWeatherCard extends HTMLElement {
 
   connectedCallback() {
     this._timer = setInterval(() => this._hass && this._config && this._fetch(), 60000 * 5);
+    if (this._hass && this._config) this._subscribeForecast();
   }
 
   disconnectedCallback() {
     clearInterval(this._timer);
+    this._unsubForecast();
+  }
+
+  _unsubForecast() {
+    for (const u of this._fcUnsubs) { try { u(); } catch (e) { /* egal */ } }
+    this._fcUnsubs = [];
+    this._fcFor = null;
+  }
+
+  /** Vorhersage einer Wetter-Entität abonnieren (stündlich + täglich) */
+  _subscribeForecast() {
+    const id = this._config?.weather_entity || "";
+    if (this._fcFor === id) return;
+    this._unsubForecast();
+    this._fcFor = id;
+    this._fc = {};
+    if (!id || !this._hass?.connection?.subscribeMessage) return;
+    for (const type of ["hourly", "daily"]) {
+      this._hass.connection
+        .subscribeMessage((m) => {
+          if (this._fcFor !== id) return;
+          this._fc[type] = m?.forecast || [];
+          this._queueRender();
+        }, { type: "weather/subscribe_forecast", forecast_type: type, entity_id: id })
+        .then((u) => (this._fcFor === id ? this._fcUnsubs.push(u) : u()))
+        .catch(() => {});
+    }
   }
 
   getCardSize() {
@@ -771,6 +891,29 @@ class ThorWeatherCard extends HTMLElement {
     }
   }
 
+  /** Geschwindigkeit (km/h) als Zahl in Anzeigeeinheit (bei Beaufort in km/h) */
+  _speedNum(kmh) {
+    let u = this._config.wind_unit;
+    if (u === "auto") u = this._unit("wind_speed_entity") || "km/h";
+    if (u === "bft") u = "km/h";
+    return kmh / (SPEED_TO_KMH[u.toLowerCase()] ?? 1);
+  }
+
+  /** Zeile mit aktuellem Wind über der Windrose */
+  _roseNow() {
+    const t = this._t;
+    const dir = this._val("wind_direction_entity");
+    const kmh = this._kmh("wind_speed_entity");
+    const gust = this._kmh("wind_gust_entity");
+    if (!ok(kmh) && !ok(dir)) return "";
+    const s = this._speed(kmh), g = this._speed(gust);
+    return `<div class="rnow">
+      <span><ha-icon icon="mdi:compass-outline"></ha-icon>${esc(t.rose_now)}: <b>${ok(dir) ? this._cardinal(dir) : "–"}</b>${ok(dir) ? ` ${Math.round(dir)}°` : ""}</span>
+      ${ok(kmh) ? `<span><i style="background:var(--thor-blue)"></i><b>${s.v} ${esc(s.u)}</b> · ${beaufort(kmh)} Bft · ${esc(t.bft[beaufort(kmh)])}</span>` : ""}
+      ${ok(gust) ? `<span><i style="background:var(--thor-gust)"></i>${esc(t.gusts)} <b>${g.v} ${esc(g.u)}</b> · ${beaufort(gust)} Bft</span>` : ""}
+    </div>`;
+  }
+
   /** längster Zeitraum, der aus dem Roh-Verlauf kommt (Wind) */
   _rawWindMs() {
     const c = this._config;
@@ -910,6 +1053,20 @@ class ThorWeatherCard extends HTMLElement {
     return "fall_fast";
   }
 
+  _zambretti() {
+    const pr = this._pressureTrend();
+    if (!ok(pr.p)) return null;
+    const trend = !ok(pr.d) ? 0 : pr.d >= 1.6 ? 1 : pr.d <= -1.6 ? 2 : 0;
+    const loc = this._loc();
+    const hemi = this._config.hemisphere;
+    const south = hemi === "south" || (hemi === "auto" && loc && loc.lat < 0);
+    const dir = this._val("wind_direction_entity");
+    const kmh = this._kmh("wind_speed_entity");
+    const useDir = ok(dir) && !(ok(kmh) && kmh < 1);
+    const z = zambretti(pr.p, trend, useDir ? dir : NaN, new Date().getMonth() + 1, south);
+    return { ...z, p: pr.p, d: pr.d, trend, dir: useDir ? dir : NaN, south, text: this._t.z[z.idx], icon: Z_ICON(z.idx) };
+  }
+
   _forecast(p, d) {
     if (!ok(p)) return null;
     const k = this._trendKey(d);
@@ -1037,7 +1194,8 @@ class ThorWeatherCard extends HTMLElement {
       ? `<div class="head">${c.icon ? `<ha-icon icon="${esc(c.icon)}"></ha-icon>` : ""}<span class="title">${esc(c.title)}</span>${this._loading && !this._daily ? `<span class="muted small">${esc(t.loading)}</span>` : ""}</div>`
       : "";
 
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card>${header}${tabs}<div class="body">${body}</div></ha-card>`;
+    const vars = `--thor-accent:${c.accent_color};--thor-blue:${c.wind_color};--thor-gust:${c.gust_color};--thor-needle:${c.needle_color};`;
+    this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card style="${vars}">${header}${tabs}<div class="body">${body}</div></ha-card>`;
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
       this._tab = b.dataset.tab;
       this._render();
@@ -1047,6 +1205,12 @@ class ThorWeatherCard extends HTMLElement {
       const [sel, val] = b.dataset.range.split(":");
       this._sel[sel] = val;
       this._save(sel, val);
+      this._render();
+    }));
+    this.shadowRoot.querySelectorAll("[data-rmetric]").forEach((b) => b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      this._roseMetric = b.dataset.rmetric;
+      this._save("rmetric", this._roseMetric);
       this._render();
     }));
     this.shadowRoot.querySelectorAll("[data-rmode]").forEach((b) => b.addEventListener("click", (ev) => {
@@ -1070,6 +1234,11 @@ class ThorWeatherCard extends HTMLElement {
       if (c.show_gauges) parts.push(this._gauges());
       if (c.show_temps) parts.push(this._temps());
       if (c.show_uv && c.uv_entity) parts.push(this._uv());
+    } else if (tab === "forecast") {
+      if (c.show_zambretti) parts.push(this._zambrettiPanel());
+      if (c.show_pressure_chart && c.pressure_entity) parts.push(this._pressureChart());
+      if (c.show_risks) parts.push(this._risks());
+      if (c.show_weather_forecast) parts.push(this._weatherForecast());
     } else if (tab === "sun") {
       if (c.show_sun_arc) parts.push(this._sunArc());
       if (c.show_sun_uv && c.uv_entity) parts.push(this._uvSun());
@@ -1106,11 +1275,12 @@ class ThorWeatherCard extends HTMLElement {
     const feels = c.feels_like_entity ? this._val("feels_like_entity") : this._fromC(feelsLikeC(tc, rh, kmh));
     const dew = c.dew_point_entity ? this._val("dew_point_entity") : this._fromC(dewPointC(tc, rh));
     const pr = this._pressureTrend();
+    const zb = c.forecast_model === "zambretti" ? this._zambretti() : null;
     const fc = this._forecast(pr.p, pr.d);
     const raining = this._isRaining();
     const tk = this._trendKey(pr.d);
     const arrow = tk ? (tk.startsWith("rise") ? (tk === "rise_slow" ? "↗" : "↑") : tk.startsWith("fall") ? (tk === "fall_slow" ? "↘" : "↓") : "→") : "";
-    const icon = raining ? "mdi:weather-pouring" : fc === "storm" ? "mdi:weather-lightning-rainy" : fc === "rain" ? "mdi:weather-rainy" : fc === "worse" || fc === "unsettled" ? "mdi:weather-partly-cloudy" : "mdi:weather-sunny";
+    const icon = raining ? "mdi:weather-pouring" : zb ? zb.icon : fc === "storm" ? "mdi:weather-lightning-rainy" : fc === "rain" ? "mdi:weather-rainy" : fc === "worse" || fc === "unsettled" ? "mdi:weather-partly-cloudy" : "mdi:weather-sunny";
     const unit = this._tempUnit();
     const chips = [];
     if (ok(feels) && (c.feels_like_entity || Math.abs(feels - T0) >= 0.5)) chips.push(this._chip("mdi:thermometer-lines", t.feels, `${this._fmt(feels)} ${unit}`, c.feels_like_entity ? "feels_like_entity" : ""));
@@ -1137,7 +1307,7 @@ class ThorWeatherCard extends HTMLElement {
         <ha-icon class="hero-icon" icon="${icon}" style="color:${raining ? "#38bdf8" : ok(tc) ? tempColor(tc) : "var(--primary-color)"}"></ha-icon>
         <div>
           <div class="hero-temp">${this._fmt(T0)}<span class="u">${esc(unit)}</span></div>
-          ${fc ? `<div class="hero-fc">${esc(raining ? t.raining : t.fc[fc])}${tk ? ` <span class="muted">· ${esc(t.pressure)} ${esc(t.trend[tk])}</span>` : ""}</div>` : ""}
+          ${fc ? `<div class="hero-fc">${esc(raining ? t.raining : zb ? zb.text : t.fc[fc])}${tk ? ` <span class="muted">· ${esc(t.pressure)} ${esc(t.trend[tk])}</span>` : ""}</div>` : ""}
         </div>
       </div>
       <div class="chips">${chips.join("")}</div>
@@ -1385,6 +1555,164 @@ class ThorWeatherCard extends HTMLElement {
         ${mm.max && mm.max.v > 0 ? `<div class="small">${esc(t.uv_max)}: <b>${this._fmt(mm.max.v, 1)}</b> <span class="muted">${this._time(mm.max.t)}</span></div>` : ""}
         ${ok(rad) ? `<div class="small" data-more="radiation_entity">${esc(t.radiation)}: <b>${this._fmt(rad, 0)}</b> ${esc(this._unit("radiation_entity"))}</div>` : ""}
       </div>
+    </div>`;
+  }
+
+  /* ------------------------------------------------------------ Prognose */
+
+  _zambrettiPanel() {
+    const t = this._t;
+    const z = this._zambretti();
+    if (!z) return `<div class="panel"><div class="panel-t">${esc(t.fc_title)}</div><div class="empty">${esc(t.fc_need)}</div></div>`;
+    const tk = this._trendKey(z.d);
+    // Skala A–Z: A = beständig schön … Z = stürmisch
+    let scale = "";
+    for (let i = 0; i < 26; i++) {
+      const col = i <= 5 ? "#f59e0b" : i <= 14 ? "#94a3b8" : i <= 23 ? "#3b82f6" : "#7c3aed";
+      scale += `<span class="zs ${i === z.idx ? "on" : ""}" style="background:${col}" title="${String.fromCharCode(65 + i)} – ${esc(t.z[i])}"></span>`;
+    }
+    const corr = ok(z.dir) ? Z_WIND[CARD_EN[Math.round(norm360(z.south ? z.dir + 180 : z.dir) / 22.5) % 16]] : NaN;
+    const chips = [
+      this._chip("mdi:gauge", t.pressure, `${this._fmt(z.p, 1)} hPa`, "pressure_entity"),
+      this._chip(z.trend === 1 ? "mdi:trending-up" : z.trend === 2 ? "mdi:trending-down" : "mdi:trending-neutral", t.trend3h, ok(z.d) ? `${z.d > 0 ? "+" : ""}${this._fmt(z.d, 1)} hPa · ${t.trend[tk]}` : "–", "pressure_entity"),
+      this._chip("mdi:compass-outline", t.wind_corr, ok(z.dir) ? `${this._cardinal(z.dir)} · ${corr > 0 ? "+" : ""}${this._fmt(corr, 1)} hPa` : "–", "wind_direction_entity"),
+      this._chip("mdi:calendar-range", t.season, z.summer ? t.season_s : t.season_w),
+    ];
+    return `<div class="panel">
+      <div class="panel-t row"><span>${esc(t.fc_title)}</span><span class="small muted">${esc(t.fc_model)}: Zambretti</span></div>
+      <div class="zmain">
+        <ha-icon icon="${z.icon}"></ha-icon>
+        <div><div class="ztext">${esc(z.text)}</div><div class="small muted">${esc(t.fc_next)}</div></div>
+        <div class="zletter" title="Zambretti">${z.letter}</div>
+      </div>
+      <div class="zscale">${scale}</div>
+      <div class="zscale-l small muted"><span>A · ${esc(t.z[0])}</span><span>Z · ${esc(t.z[25])}</span></div>
+      <div class="panel-t small" style="margin-top:8px">${esc(t.fc_inputs)}</div>
+      <div class="chips ex">${chips.join("")}</div>
+    </div>`;
+  }
+
+  _pressureChart() {
+    const t = this._t;
+    const now = Date.now(), from = now - DAY, to = now + 6 * HOUR;
+    const pts = this._series("pressure_entity").slice();
+    const live = this._val("pressure_entity");
+    if (ok(live)) pts.push({ t: now, v: live });
+    const seg = pts.filter((p) => p.t >= from && ok(p.v));
+    const v0 = valueAt(pts, from);
+    if (ok(v0)) seg.unshift({ t: from, v: v0 });
+    if (seg.length < 2) return "";
+    // Trend: lineare Regression der letzten 3 Stunden
+    const last = seg.filter((p) => p.t >= now - 3 * HOUR);
+    let slope = NaN, icpt = NaN;
+    if (last.length >= 2) {
+      const n = last.length, mx = last.reduce((a, p) => a + p.t, 0) / n, my = last.reduce((a, p) => a + p.v, 0) / n;
+      let nu = 0, den = 0;
+      for (const p of last) { nu += (p.t - mx) * (p.v - my); den += (p.t - mx) ** 2; }
+      slope = den ? nu / den : 0;
+      icpt = my - slope * mx;
+    }
+    const fut = ok(slope) ? icpt + slope * to : NaN;
+    const vals = [...seg.map((p) => p.v), fut].filter(ok);
+    let lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+    if (hi - lo < 6) { const m = (hi + lo) / 2; lo = Math.floor(m - 3); hi = Math.ceil(m + 3); }
+    const W = 320, H = 130, L = 34, top = 8, bot = 16;
+    const X = (tt) => L + ((tt - from) / (to - from)) * (W - L);
+    const Y = (v) => top + (1 - (v - lo) / (hi - lo)) * (H - top - bot);
+    let s = "";
+    const step = hi - lo > 20 ? 5 : hi - lo > 10 ? 2 : 1;
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) s += `<line x1="${L}" x2="${W}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="grid"/><text x="${L - 3}" y="${Y(v).toFixed(1)}" class="al" text-anchor="end">${v}</text>`;
+    s += `<rect x="${X(now).toFixed(1)}" y="${top}" width="${(W - X(now)).toFixed(1)}" height="${H - top - bot}" fill="var(--thor-accent)" opacity=".07"/>`;
+    let d = "";
+    seg.forEach((p, i) => { if (i) d += `L${X(p.t).toFixed(1)},${Y(seg[i - 1].v).toFixed(1)} `; d += `${i ? "L" : "M"}${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)} `; });
+    s += `<path d="${d}" fill="none" stroke="#c9971c" stroke-width="1.8"/>`;
+    if (ok(fut)) {
+      const col = slope * 3 * HOUR <= -1.6 ? "#e05252" : slope * 3 * HOUR >= 1.6 ? "#2e9d5b" : "var(--secondary-text-color)";
+      s += `<line x1="${X(now - 3 * HOUR).toFixed(1)}" y1="${Y(icpt + slope * (now - 3 * HOUR)).toFixed(1)}" x2="${X(to).toFixed(1)}" y2="${Y(fut).toFixed(1)}" stroke="${col}" stroke-width="1.6" stroke-dasharray="4 3"/>`;
+      s += `<text x="${(W - 4).toFixed(1)}" y="${(Y(fut) - 7).toFixed(1)}" class="bl" text-anchor="end">${this._fmt(fut, 1)}</text>`;
+    }
+    s += `<line x1="${X(now).toFixed(1)}" x2="${X(now).toFixed(1)}" y1="${top}" y2="${H - bot}" stroke="var(--thor-accent)" stroke-dasharray="3 2"/>`;
+    s += `<line x1="${L}" x2="${W}" y1="${H - bot}" y2="${H - bot}" class="axis"/>`;
+    for (let h = -24; h <= 6; h += 6) s += `<text x="${clamp(X(now + h * HOUR), L + 14, W - 14).toFixed(1)}" y="${H - 3}" class="bl muted">${h === 0 ? this._time(now) : `${h > 0 ? "+" : ""}${h} h`}</text>`;
+    return `<div class="panel" data-more="pressure_entity"><div class="panel-t row"><span>${esc(t.press_chart)}</span>${ok(fut) ? `<span class="small muted">${esc(t.press_extra)}: <b>${this._fmt(fut, 1)} hPa</b></span>` : ""}</div>
+      <svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg></div>`;
+  }
+
+  _dewC() {
+    if (this._config.dew_point_entity) return this._toC(this._val("dew_point_entity"), "dew_point_entity");
+    return dewPointC(this._toC(this._val("outdoor_temp_entity")), this._val("humidity_entity"));
+  }
+
+  _risks() {
+    const t = this._t;
+    const items = [];
+    const T0 = this._toC(this._val("outdoor_temp_entity"));
+    const rh = this._val("humidity_entity");
+    const kmh = this._kmh("wind_speed_entity");
+    const gust = this._kmh("wind_gust_entity");
+    const td = this._dewC();
+    const spread = ok(T0) && ok(td) ? T0 - td : NaN;
+    const pos = this._sunNow();
+    const night = pos && ok(pos.el) ? pos.el < 0 : new Date().getHours() < 7 || new Date().getHours() > 18;
+    const pr = this._pressureTrend();
+    const add = (key, lvl, icon, detail) => items.push({ key, lvl, icon, detail });
+    const unit = this._tempUnit();
+    // Nebel: kleine Taupunktdifferenz, wenig Wind
+    if (ok(spread)) {
+      const calmish = !ok(kmh) || kmh < 8;
+      const lvl = spread < 1 && calmish ? 3 : spread < 2 && (!ok(kmh) || kmh < 12) ? 2 : spread < 3 && calmish ? 1 : 0;
+      if (lvl) add("fog", lvl, "mdi:weather-fog", `T − Td ${this._fmt(spread, 1)} K${ok(kmh) ? ` · ${this._speed(kmh).v} ${this._speed(kmh).u}` : ""}`);
+    }
+    // Frost / Glätte
+    if (ok(T0)) {
+      const lvl = T0 <= 0 && ok(td) && td <= 0 ? 3 : T0 <= 1 ? 2 : T0 <= 3 && (night || (ok(td) && td < 0)) ? 1 : 0;
+      if (lvl) add("frost", lvl, "mdi:snowflake-alert", `${this._fmt(this._fromC(T0), 1)} ${unit}${ok(td) ? ` · Td ${this._fmt(this._fromC(td), 1)} ${unit}` : ""}`);
+    }
+    // Tau (nachts, Taupunkt fast erreicht, über 0 °C)
+    if (ok(spread) && night && T0 > 0 && spread < 2) add("dew", spread < 1 ? 2 : 1, "mdi:water-outline", `T − Td ${this._fmt(spread, 1)} K`);
+    // Sturm: Böen oder starker Druckfall
+    const sLvl = Math.max(ok(gust) ? (gust >= 89 ? 3 : gust >= 62 ? 2 : gust >= 50 ? 1 : 0) : 0, ok(pr.d) ? (pr.d <= -6 ? 3 : pr.d <= -3.5 ? 2 : pr.d <= -2.5 ? 1 : 0) : 0);
+    if (sLvl) add("storm", sLvl, "mdi:weather-windy", [ok(gust) ? `${t.gusts} ${this._speed(gust).v} ${this._speed(gust).u}` : "", ok(pr.d) ? `${pr.d > 0 ? "+" : ""}${this._fmt(pr.d, 1)} hPa/3 h` : ""].filter(Boolean).join(" · "));
+    // Gewitterneigung (Faustregel): warm-feucht und fallender Druck
+    if (ok(T0) && ok(td) && T0 >= 20 && td >= 15 && ok(pr.d) && pr.d < -1) add("thunder", td >= 18 && pr.d < -2 ? 2 : 1, "mdi:weather-lightning", `Td ${this._fmt(this._fromC(td), 1)} ${unit} · ${this._fmt(pr.d, 1)} hPa/3 h`);
+    // Hitze
+    const feels = this._config.feels_like_entity ? this._toC(this._val("feels_like_entity"), "feels_like_entity") : feelsLikeC(T0, rh, kmh);
+    if (ok(feels) && feels >= 27) add("heat", feels >= 38 ? 3 : feels >= 32 ? 2 : 1, "mdi:thermometer-alert", `${t.feels} ${this._fmt(this._fromC(feels), 1)} ${unit}`);
+    const uv = this._val("uv_entity");
+    if (ok(uv) && uv >= 6) add("uv", uv >= 11 ? 3 : uv >= 8 ? 2 : 1, "mdi:sun-wireless", `UV ${this._fmt(uv, 1)}`);
+    const cols = ["#94a3b8", "#eab308", "#f97316", "#dc2626"];
+    const body = items.length
+      ? items.sort((a, b) => b.lvl - a.lvl).map((i) => `<div class="risk" style="border-left-color:${cols[i.lvl]}"><ha-icon icon="${i.icon}" style="color:${cols[i.lvl]}"></ha-icon><div><div><b>${esc(t.risk[i.key])}</b> · ${esc(t.lvl[i.lvl])}</div><div class="small muted">${esc(i.detail)}</div></div></div>`).join("")
+      : `<div class="risk" style="border-left-color:#2e9d5b"><ha-icon icon="mdi:check-circle-outline" style="color:#2e9d5b"></ha-icon><div>${esc(t.risk.none)}</div></div>`;
+    return `<div class="panel"><div class="panel-t">${esc(t.risks)}</div><div class="risks">${body}</div></div>`;
+  }
+
+  _weatherForecast() {
+    const c = this._config;
+    const t = this._t;
+    if (!c.weather_entity) return `<div class="panel"><div class="empty small">${esc(t.wx_none)}</div></div>`;
+    const st = this._hass?.states?.[c.weather_entity];
+    const legacy = st?.attributes?.forecast;
+    const hourly = (this._fc.hourly || []).filter((f) => Date.parse(f.datetime) >= Date.now() - HOUR).slice(0, c.forecast_hours);
+    const daily = (this._fc.daily || legacy || []).slice(0, c.forecast_days);
+    const pu = st?.attributes?.precipitation_unit || "mm";
+    const wu = st?.attributes?.wind_speed_unit || "km/h";
+    const name = st?.attributes?.friendly_name || c.weather_entity;
+    const col = (f, label) => `<div class="wxc">
+      <div class="small muted">${esc(label)}</div>
+      <ha-icon icon="${WX_ICON[f.condition] || "mdi:weather-cloudy"}"></ha-icon>
+      <div><b>${this._fmt(num(f.temperature), 0)}°</b>${ok(num(f.templow)) ? ` <span class="muted">${this._fmt(num(f.templow), 0)}°</span>` : ""}</div>
+      ${ok(num(f.precipitation)) && num(f.precipitation) > 0 ? `<div class="small" style="color:#3b82f6">${this._fmt(num(f.precipitation), 1)} ${esc(pu)}</div>` : `<div class="small muted">–</div>`}
+      ${ok(num(f.precipitation_probability)) ? `<div class="small muted">${Math.round(num(f.precipitation_probability))} %</div>` : ""}
+      ${ok(num(f.wind_speed)) ? `<div class="small muted">${ok(num(f.wind_bearing)) ? this._cardinal(num(f.wind_bearing)) + " " : ""}${this._fmt(num(f.wind_speed), 0)}</div>` : ""}
+    </div>`;
+    const h = hourly.map((f) => col(f, this._time(Date.parse(f.datetime)))).join("");
+    const d = daily.map((f) => col(f, new Date(Date.parse(f.datetime)).toLocaleDateString(this._lang === "de" ? "de-DE" : "en-GB", { weekday: "short" }))).join("");
+    if (!h && !d) return `<div class="panel"><div class="panel-t">${esc(t.wx_from)} ${esc(name)}</div><div class="empty">${esc(t.loading)}</div></div>`;
+    return `<div class="panel" data-more="weather_entity">
+      <div class="panel-t row"><span>${esc(t.wx_from)} ${esc(name)}</span><span class="small muted">${esc(wu)}</span></div>
+      ${h ? `<div class="panel-t small">${esc(t.wx_hourly)}</div><div class="wxrow">${h}</div>` : ""}
+      ${d ? `<div class="panel-t small" style="margin-top:6px">${esc(t.wx_daily)}</div><div class="wxrow">${d}</div>` : ""}
     </div>`;
   }
 
@@ -1954,6 +2282,40 @@ class ThorWeatherCard extends HTMLElement {
         s += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="rl">${p}%</text>`;
       }
     }
+    const metric = this._roseMetric || "freq";
+    const spdMode = metric !== "freq" && st && st.secAvg;
+    if (spdMode) {
+      // Radius = Ø Geschwindigkeit (bzw. Beaufort) je Richtung, Bogen = Maximum, Deckkraft = Häufigkeit
+      s = this._houseImage(cx, cy, R, "thor-rclip");
+      const val = (kmh) => (metric === "bft" ? beaufort(kmh) : this._speedNum(kmh));
+      const vals = [...st.secAvg, ...st.secMax].filter(ok).map(val);
+      let top;
+      if (metric === "bft") top = Math.max(3, Math.min(12, Math.max(0, ...vals) + 1));
+      else {
+        const m = Math.max(1, ...vals);
+        const sp_ = m > 40 ? 10 : m > 16 ? 5 : m > 6 ? 2 : 1;
+        top = Math.ceil((m * 1.05) / sp_) * sp_;
+      }
+      const sc = (R - r0) / top;
+      const stepR = metric === "bft" ? (top > 8 ? 2 : 1) : top / 4;
+      for (let v = stepR; v <= top + 1e-9; v += stepR) {
+        const rr = r0 + v * sc;
+        s += `<circle cx="${cx}" cy="${cy}" r="${rr.toFixed(1)}" class="rring"/>`;
+        const [lx, ly] = pt(cx, cy, rr, 101.25);
+        s += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="rl">${metric === "bft" ? `${v}` : this._fmt(v, v % 1 ? 1 : 0)}</text>`;
+      }
+      s += this._compassRing(cx, cy, R + 2, false);
+      const maxPct = Math.max(...st.secPct, 0.0001);
+      for (let i = 0; i < 16; i++) {
+        const a = i * 22.5, av = st.secAvg[i], mx = st.secMax[i];
+        if (!ok(av)) continue;
+        const cls = ROSE_CLASSES.reduce((k, l, j) => (av >= l ? j : k), 0);
+        const rb = r0 + Math.max(0.15, val(av)) * sc;
+        const sp = this._speed(av), sm = this._speed(mx);
+        s += `<path d="${wedge(cx, cy, r0, rb, a - 9.5, a + 9.5)}" fill="${ROSE_COLORS[cls]}" opacity="${(0.35 + 0.65 * (st.secPct[i] / maxPct)).toFixed(2)}" stroke="var(--card-background-color,#fff)" stroke-width="0.6"><title>${this._cardinal(a)} · Ø ${sp.v} ${sp.u} (${beaufort(av)} Bft) · max ${sm.v} ${sm.u} (${beaufort(mx)} Bft) · ${this._fmt(st.secPct[i], 1)} %</title></path>`;
+        if (ok(mx)) s += `<path d="${arcPath(cx, cy, r0 + val(mx) * sc, a - 9.5, a + 9.5)}" stroke="var(--thor-gust)" stroke-width="2" fill="none"/>`;
+      }
+    } else {
     s += this._compassRing(cx, cy, R + 2, false);
     if (st) {
       for (let i = 0; i < 16; i++) {
@@ -1966,6 +2328,7 @@ class ThorWeatherCard extends HTMLElement {
           acc += v;
         });
       }
+    }
     }
     s += `<circle cx="${cx}" cy="${cy}" r="${r0}" class="calm"/><text x="${cx}" y="${cy + 1}" class="calm-t">${st ? Math.round(st.calmPct) + "%" : "–"}</text>`;
     const dir = this._val("wind_direction_entity");
@@ -1981,8 +2344,11 @@ class ThorWeatherCard extends HTMLElement {
     const btns = this._rangeButtons("rose", c.windrose_periods);
     return `<div class="panel">
       <div class="panel-t row"><span>${esc(t.rose)}${gustMode ? ` · <span style="color:var(--thor-gust)">${esc(t.gust_mode)}</span>` : ""}</span>${st && st.top >= 0 ? `<span class="small muted">${esc(t.rose_top)}: <b>${this._cardinal(st.top * 22.5)}</b> · ${esc(t.rose_calm)} ${Math.round(st.calmPct)} %</span>` : ""}</div>
+      ${c.show_rose_now ? this._roseNow() : ""}
       ${st ? `<svg viewBox="0 0 300 300" class="rose">${s}</svg>` : `<div class="empty">${esc(this._loading ? t.loading : R0.stats ? t.no_dir_stats : t.nodata)}</div>`}
-      <div class="legend center small">${legend}${unit}</div>
+      ${spdMode ? "" : `<div class="legend center small">${legend}${unit}</div>`}
+      ${spdMode ? `<div class="small muted center">${esc(t.rose_avg_hint)}${metric === "speed" ? ` · ${esc(this._speed(1).u)}` : " · Bft"}</div>` : ""}
+      ${c.show_rose_metric_switch ? `<div class="pbtns">${["freq", "speed", "bft"].map((m) => `<button class="pbtn ${m === metric ? "on" : ""}" data-rmetric="${m}">${esc(t.rose_metric[m])}</button>`).join("")}</div>` : ""}
       ${R0.stats || R0.months ? `<div class="small muted center">${this._rangeTitle(rk)} · ${this._lang === "de" ? "aus Stundenmitteln" : "from hourly means"}</div>` : ""}
       ${btns}
       ${c.wind_gust_entity ? `<div class="pbtns"><span class="small muted">${esc(t.rose_by)}</span><button class="pbtn ${!gustMode ? "on" : ""}" data-rmode="wind">${esc(t.wind_mode)}</button><button class="pbtn ${gustMode ? "on gust" : ""}" data-rmode="gust">${esc(t.gust_mode)}</button></div>` : ""}
@@ -2392,6 +2758,23 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .wfill { height:100%; border-radius:4px; }
 .wfill.w { background: var(--thor-blue); } .wfill.g { background: var(--thor-gust); }
 .pbtn.on.gust { border-color: var(--thor-gust); color: var(--thor-gust); }
+/* Prognose */
+.zmain { display:flex; align-items:center; gap:12px; }
+.zmain ha-icon { --mdc-icon-size: 56px; color: var(--thor-accent); }
+.ztext { font-size: 1.3em; font-weight: 600; line-height: 1.2; }
+.zletter { margin-left:auto; width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:1.3em; border:2px solid var(--thor-accent); color: var(--thor-accent); flex:none; }
+.zscale { display:flex; gap:2px; margin-top:12px; }
+.zs { flex:1; height:8px; border-radius:2px; opacity:.35; }
+.zs.on { opacity:1; transform: scaleY(1.9); box-shadow: 0 0 0 1px var(--primary-text-color); }
+.zscale-l { display:flex; justify-content:space-between; margin-top:4px; }
+.risks { display:grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap:6px; }
+.risk { display:flex; gap:8px; align-items:center; padding:6px 8px; border-radius:8px; border-left:4px solid; background: var(--secondary-background-color, rgba(127,127,127,.08)); }
+.wxrow { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
+.wxc { flex: 0 0 58px; text-align:center; border:1px solid var(--divider-color); border-radius:10px; padding:5px 2px; display:flex; flex-direction:column; align-items:center; gap:1px; font-size:.9em; }
+.wxc ha-icon { --mdc-icon-size: 26px; color: var(--thor-blue); }
+.rnow { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 14px; font-size:.85em; margin-bottom:4px; }
+.rnow ha-icon { --mdc-icon-size: 16px; color: var(--thor-blue); vertical-align:-3px; margin-right:3px; }
+.rnow i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
 /* Sonne */
 .sunarc { width:100%; height:auto; display:block; }
 .sunglow { filter: drop-shadow(0 0 5px rgba(251,191,36,.9)); }
@@ -2430,7 +2813,10 @@ const ED = {
       skin_type: "Hauttyp", sunshine_threshold: "Sonnenschein ab",
       title: "Titel", icon: "Symbol", show_header: "Kopfzeile", layout: "Layout", default_tab: "Start-Reiter", tabs: "Reiter / Abschnitte", language: "Sprache",
       show_hero: "Übersicht (Jetzt)", show_gauges: "Zeigerinstrumente", show_temps: "Temperatur-Kacheln", show_uv: "UV-Pyramide",
-      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", show_gust_chart: "Wind & Böen – Verlauf", windrose_mode: "Windrose zeigt",
+      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", windrose_metric: "Windrose: Darstellung", show_rose_metric_switch: "Windrose: Umschalter Häufigkeit/Geschw./Stärke", show_rose_now: "Windrose: aktueller Wind",
+      weather_entity: "Wetter-Entität (Vorhersage)", forecast_model: "Prognosemodell", hemisphere: "Halbkugel", forecast_hours: "Stunden in der Vorhersage", forecast_days: "Tage in der Vorhersage",
+      show_zambretti: "Lokale Prognose (Zambretti)", show_pressure_chart: "Luftdruck-Trend", show_risks: "Hinweise (Nebel, Frost, Sturm …)", show_weather_forecast: "Vorhersage der Wetter-Entität",
+      accent_color: "Akzent", wind_color: "Wind", gust_color: "Böen", needle_color: "Zeiger", show_gust_chart: "Wind & Böen – Verlauf", windrose_mode: "Windrose zeigt",
       show_rain: "Regen-Status & Summen", show_rain_chart: "Regen je Tag", show_climate_days: "Klimatage", show_climate_chart: "Klimadiagramm",
       minmax_mode: "Min/Max-Zeitraum", wind_unit: "Windeinheit", windrose_periods: "Zeiträume Windrose", windrose_default: "Windrose: Start",
       wind_chart_periods: "Zeiträume Wind & Böen", wind_chart_default: "Wind & Böen: Start", rain_periods: "Zeiträume Niederschlag", rain_default: "Niederschlag: Start",
@@ -2456,15 +2842,18 @@ const ED = {
       pressure_offset: "Wird zum Messwert addiert (z. B. für Höhenkorrektur).",
       image_rotation: "Positiv = im Uhrzeigersinn. Tipp: In Google Maps ist Norden oben – so soll dein Haus liegen.",
       tabs: "Bei „Untereinander“ werden diese Abschnitte nacheinander gezeigt.",
+      forecast_model: "Zambretti: klassisches Barometer-Modell aus Luftdruck, 3-h-Tendenz, Windrichtung und Jahreszeit – am besten für die nächsten 12 h.",
+      weather_entity: "Optional – zeigt zusätzlich die Vorhersage z. B. von DWD oder Met.no.",
       radiation_entity: "Globalstrahlung in W/m² – ein Lux-Sensor geht auch (genähert umgerechnet).",
       illuminance_entity: "Optional, wird zusätzlich angezeigt; ohne Strahlungssensor als Ersatz genutzt.",
       sunshine_threshold: "WMO: Sonnenschein ab 120 W/m².",
       skin_type: "Für die Sonnenbrandzeit (Fitzpatrick I–VI).",
     },
-    sections: { windavg: "Wind-Mittelwerte der Station (optional)", temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
+    sections: { forecast: "Prognose", colors: "Farben", windavg: "Wind-Mittelwerte der Station (optional)", temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
     opts: {
       tabs: "Reiter", stack: "Untereinander", now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr",
-      wind_m: "Mittelwind", gust_m: "Böen",
+      wind_m: "Mittelwind", gust_m: "Böen", m_freq: "Häufigkeit", m_speed: "Geschwindigkeit", m_bft: "Stärke (Beaufort)", forecast: "Prognose",
+      simple: "Einfach (Druck + Tendenz)", auto_loc: "Automatisch (Standort)", north: "Nordhalbkugel", south: "Südhalbkugel",
       skins: ["I – sehr hell", "II – hell", "III – mittel", "IV – oliv", "V – braun", "VI – dunkel"],
       lang_auto: "Automatisch (HA-Sprache)", de: "Deutsch", en: "English", h24: "Letzte 24 Stunden", today: "Seit Mitternacht", auto: "Wie Sensor",
     },
@@ -2483,7 +2872,10 @@ const ED = {
       skin_type: "Skin type", sunshine_threshold: "Sunshine from",
       title: "Title", icon: "Icon", show_header: "Header", layout: "Layout", default_tab: "Start tab", tabs: "Tabs / sections", language: "Language",
       show_hero: "Overview (now)", show_gauges: "Dial gauges", show_temps: "Temperature tiles", show_uv: "UV pyramid",
-      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", show_gust_chart: "Wind & gusts – history", windrose_mode: "Wind rose shows",
+      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", windrose_metric: "Wind rose: display", show_rose_metric_switch: "Wind rose: frequency/speed/force switch", show_rose_now: "Wind rose: current wind",
+      weather_entity: "Weather entity (forecast)", forecast_model: "Forecast model", hemisphere: "Hemisphere", forecast_hours: "Hours in forecast", forecast_days: "Days in forecast",
+      show_zambretti: "Local forecast (Zambretti)", show_pressure_chart: "Pressure trend", show_risks: "Alerts (fog, frost, storm …)", show_weather_forecast: "Weather entity forecast",
+      accent_color: "Accent", wind_color: "Wind", gust_color: "Gusts", needle_color: "Needle", show_gust_chart: "Wind & gusts – history", windrose_mode: "Wind rose shows",
       show_rain: "Rain state & totals", show_rain_chart: "Rain per day", show_climate_days: "Climate days", show_climate_chart: "Climate chart",
       minmax_mode: "Min/max period", wind_unit: "Wind unit", windrose_periods: "Wind rose periods", windrose_default: "Wind rose: start",
       wind_chart_periods: "Wind & gusts periods", wind_chart_default: "Wind & gusts: start", rain_periods: "Precipitation periods", rain_default: "Precipitation: start",
@@ -2509,15 +2901,18 @@ const ED = {
       pressure_offset: "Added to the reading (e.g. altitude correction).",
       image_rotation: "Positive = clockwise. Tip: in Google Maps north is up – that is how your house should be aligned.",
       tabs: "With \"stacked\" these sections are shown one after another.",
+      forecast_model: "Zambretti: classic barometer model from pressure, 3 h trend, wind direction and season – best for the next 12 h.",
+      weather_entity: "Optional – additionally shows the forecast of e.g. Met.no.",
       radiation_entity: "Global radiation in W/m² – a lux sensor works too (approximated).",
       illuminance_entity: "Optional, shown in addition; used as fallback without a radiation sensor.",
       sunshine_threshold: "WMO: sunshine from 120 W/m².",
       skin_type: "For the sunburn time (Fitzpatrick I–VI).",
     },
-    sections: { windavg: "Station wind means (optional)", temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
+    sections: { forecast: "Forecast", colors: "Colors", windavg: "Station wind means (optional)", temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
     opts: {
       tabs: "Tabs", stack: "Stacked", now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year",
-      wind_m: "Mean wind", gust_m: "Gusts",
+      wind_m: "Mean wind", gust_m: "Gusts", m_freq: "Frequency", m_speed: "Speed", m_bft: "Force (Beaufort)", forecast: "Forecast",
+      simple: "Simple (pressure + trend)", auto_loc: "Automatic (location)", north: "Northern hemisphere", south: "Southern hemisphere",
       skins: ["I – very fair", "II – fair", "III – medium", "IV – olive", "V – brown", "VI – dark"],
       lang_auto: "Automatic (HA language)", de: "Deutsch", en: "English", h24: "Last 24 hours", today: "Since midnight", auto: "Same as sensor",
     },
@@ -2588,6 +2983,19 @@ class ThorWeatherCardEditor extends HTMLElement {
           { name: "sunshine_threshold", selector: n(10, 400, 10, "W/m²") },
         ]),
       ]),
+      sec("forecast", "mdi:crystal-ball", [
+        { name: "weather_entity", selector: { entity: { domain: "weather" } } },
+        grid([
+          { name: "forecast_model", selector: sel([["zambretti", "Zambretti"], ["simple", o.simple]]) },
+          { name: "hemisphere", selector: sel([["auto", o.auto_loc], ["north", o.north], ["south", o.south]]) },
+          { name: "forecast_hours", selector: n(4, 48, 1, "h") },
+          { name: "forecast_days", selector: n(2, 14, 1, this._l() === ED.de ? "Tage" : "days") },
+        ]),
+        grid([
+          { name: "show_zambretti", selector: bool }, { name: "show_pressure_chart", selector: bool },
+          { name: "show_risks", selector: bool }, { name: "show_weather_forecast", selector: bool },
+        ]),
+      ]),
       sec("view", "mdi:page-layout-header", [
         grid([{ name: "title", selector: { text: {} } }, { name: "icon", selector: { icon: {} } }]),
         grid([
@@ -2604,7 +3012,8 @@ class ThorWeatherCardEditor extends HTMLElement {
           { name: "show_temps", selector: bool }, { name: "show_uv", selector: bool },
           { name: "show_compass", selector: bool }, { name: "show_wind_averages", selector: bool },
           { name: "show_windrose", selector: bool }, { name: "show_wind_values", selector: bool },
-          { name: "show_gust_chart", selector: bool },
+          { name: "show_gust_chart", selector: bool }, { name: "show_rose_now", selector: bool },
+          { name: "show_rose_metric_switch", selector: bool },
           { name: "show_sun_arc", selector: bool }, { name: "show_sun_uv", selector: bool },
           { name: "show_radiation", selector: bool }, { name: "show_sun_chart", selector: bool },
           { name: "show_rain", selector: bool }, { name: "show_rain_chart", selector: bool },
@@ -2626,6 +3035,7 @@ class ThorWeatherCardEditor extends HTMLElement {
           { name: "rain_default", selector: sel(dayPeriods) },
           { name: "sun_default", selector: sel(dayPeriods) },
           { name: "windrose_mode", selector: sel([["wind", o.wind_m], ["gust", o.gust_m]]) },
+          { name: "windrose_metric", selector: sel([["freq", o.m_freq], ["speed", o.m_speed], ["bft", o.m_bft]]) },
 
           { name: "rain_day_threshold", selector: n(0, 10, 0.1, "mm") },
           { name: "pressure_offset", selector: n(-100, 100, 0.1, "hPa") },
@@ -2633,6 +3043,7 @@ class ThorWeatherCardEditor extends HTMLElement {
           { name: "temp_gauge_max", selector: n(10, 60, 1, "°C") },
         ]),
       ]),
+      sec("colors", "mdi:palette", [grid(COLOR_KEYS.map((k) => ({ name: k, selector: { color_rgb: {} } })))]),
       sec("image", "mdi:home-outline", [
         { name: "image", selector: { text: {} } },
         { name: "image_scale", selector: n(0.2, 1.6, 0.05, null, "slider") },
@@ -2653,7 +3064,9 @@ class ThorWeatherCardEditor extends HTMLElement {
       this.appendChild(this._form);
     }
     this._form.hass = this._hass;
-    this._form.data = { ...DEFAULTS, ...this._config, skin_type: String(this._config.skin_type ?? DEFAULTS.skin_type) };
+    const data = { ...DEFAULTS, ...this._config, skin_type: String(this._config.skin_type ?? DEFAULTS.skin_type) };
+    for (const k of COLOR_KEYS) data[k] = hexToRgb(data[k]) || hexToRgb(DEFAULTS[k]);
+    this._form.data = data;
     this._form.schema = this._schema();
   }
 
@@ -2664,6 +3077,7 @@ class ThorWeatherCardEditor extends HTMLElement {
     for (const [k, val] of Object.entries(v)) {
       if (k === "type" || val === undefined || val === null || val === "") continue;
       if (k === "skin_type") { if (Number(val) !== DEFAULTS.skin_type) out[k] = Number(val); continue; }
+      if (COLOR_KEYS.includes(k)) { const h = Array.isArray(val) ? rgbToHex(val) : val; if (String(h).toLowerCase() !== DEFAULTS[k]) out[k] = h; continue; }
       if (JSON.stringify(val) === JSON.stringify(DEFAULTS[k])) continue;
       out[k] = val;
     }

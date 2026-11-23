@@ -21,6 +21,12 @@
 - **Gefühlte Temperatur und Taupunkt werden berechnet** (Windchill / Hitzeindex, Magnus-Formel), wenn du dafür keine Sensoren hast
 - **UV-Pyramide** in WHO-Farben mit Risikostufe, Schutz-Tipp und Tagesmaximum
 
+**Prognose**
+- **Lokale Prognose mit dem Zambretti-Modell** (Negretti & Zambra): Luftdruck, 3-Stunden-Tendenz, Windrichtung und Jahreszeit ergeben eine von 26 Prognosen von *A – Beständig schön* bis *Z – Stürmisch, viel Regen*, mit Skala und allen Eingangswerten; wird auch in der Übersicht genutzt
+- **Luftdruck-Diagramm 24 h mit Trend**, 6 Stunden in die Zukunft verlängert
+- **Hinweise**: Nebel, Frost / Glätte, Tau, Sturm (Böen oder schneller Druckfall), Gewitterneigung, Hitze und UV – jeweils mit Stufe und den Werten dahinter
+- Optional die **Vorhersage einer Wetter-Entität** (z. B. DWD, Met.no): stündlich und täglich mit Temperatur, Niederschlag, Wahrscheinlichkeit und Wind
+
 **Sonne**
 - **Sonnenbogen** des Tages mit aktuellem Sonnenstand, Auf- und Untergang, **Tageslänge inkl. Änderung zu gestern**, Sonnenhöchststand mit Höhe, aktuelle Höhe und Azimut (aus dem Standort von Home Assistant berechnet)
 - **UV**: Pyramide plus UV-Kurve des Tages in den WHO-Stufen, **UV-Tagesdosis** (SED) und **Zeit bis zum Sonnenbrand** für Hauttyp I–VI (dein Typ hervorgehoben)
@@ -33,7 +39,8 @@
 - **Wind und Böen klar getrennt**: Vergleichsbalken Mittelwind gegen Böen, **Böigkeit** (gleichmäßig … stark böig) mit Böenfaktor, Böen im Kompass und in der Übersicht
 - **Diagramm Wind & Böen (24 h)**: Mittelwind (10-Minuten-Mittel) als Fläche, Böen (10-Minuten-Maximum) als Linie, Beaufort-Achse, Spitzenböe markiert
 - **Richtungsmittel für Stunde, Tag, Monat und Jahr** (Vektormittel – nicht das falsche arithmetische Mittel) plus **Hauptrichtung** und **Beständigkeit**
-- **Windrose** mit 16 Sektoren, gestapelt nach Beaufort-Klassen, Windstille in der Mitte, wählbaren Zeiträumen (1 Stunde … 30 Tage) und umschaltbar zwischen **Mittelwind und Böen**
+- **Windrose** in der Karte umschaltbar zwischen **Häufigkeit**, **Geschwindigkeit** und **Stärke (Beaufort)** – Geschwindigkeit/Stärke zeigen das Mittel je Richtung, das Maximum als Bogen und die Häufigkeit als Deckkraft; aktueller Wind, Böen und Beaufort stehen immer über der Rose
+- 16 Sektoren, gestapelt nach Beaufort-Klassen, Windstille in der Mitte, wählbaren Zeiträumen (1 Stunde … 30 Tage) und umschaltbar zwischen **Mittelwind und Böen**
 - Optional **Hausbild** hinter Kompass und Windrose – gleiche Optionen wie bei der [Helios Compass Card](https://github.com/muhkuh666/helios-compass-card)
 - Windwerte-Liste: Grad, Beaufort, km/h · m/s · Knoten · mph, Böen, stärkste Böe der letzten 24 h, Durchschnittsgeschwindigkeiten
 - Windeinheit wählbar: wie Sensor, km/h, m/s, kn, mph oder Beaufort
@@ -54,15 +61,16 @@
 - Die letzte Auswahl wird je Diagramm gemerkt
 
 **Allgemein**
-- Reiter (*Jetzt · Sonne · Wind · Regen · Jahr*) oder alles untereinander, jeder Bereich abschaltbar
+- Reiter (*Jetzt · Prognose · Sonne · Wind · Regen · Jahr*)
+- **Jede Option** ist im grafischen Editor einstellbar, inkl. Farben (Akzent, Wind, Böen, Zeiger) oder alles untereinander, jeder Bereich abschaltbar
 - Komplett im **grafischen Karten-Editor** einstellbar, Deutsch und Englisch, helles & dunkles Theme
 - Klick auf einen Wert öffnet den *Mehr-Infos*-Dialog von Home Assistant
 
 ## Screenshots
 
-| Jetzt | Sonne | Wind | Regen | Jahr |
-|---|---|---|---|---|
-| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
+| Jetzt | Prognose | Sonne | Wind | Regen | Jahr |
+|---|---|---|---|---|---|
+| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/forecast.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
 
 ## Installation
 
@@ -148,7 +156,7 @@ image_opacity: 0.55
 | Option | Standard | Beschreibung |
 |---|---|---|
 | `layout` | `tabs` | `tabs` (Reiter) oder `stack` (alles untereinander) |
-| `tabs` | `[now, sun, wind, rain, year]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
+| `tabs` | `[now, forecast, sun, wind, rain, year]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
 | `default_tab` | `now` | Start-Reiter |
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Einzelne Bereiche ein-/ausblenden |
 | `minmax_mode` | `24h` | Min/Max über die letzten 24 h oder `today` (seit Mitternacht) |
@@ -157,6 +165,14 @@ image_opacity: 0.55
 | `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, 1y]` | Zeitraum-Knöpfe von Wind & Böen |
 | `rain_periods` / `sun_periods` | `[7d, 14d, 30d, 1y, summer, winter]` | Zeitraum-Knöpfe von Niederschlag / Sonnenstunden |
 | `windrose_default`, `wind_chart_default`, `rain_default`, `sun_default` | `24h`, `24h`, `14d`, `14d` | Start-Zeitraum (die letzte Auswahl merkt sich der Browser) |
+| `weather_entity` | | Wetter-Entität, deren Vorhersage im Reiter *Prognose* erscheint |
+| `forecast_model` | `zambretti` | `zambretti` oder `simple` (nur Druck + Tendenz) |
+| `hemisphere` | `auto` | `auto` (aus Standort), `north`, `south` – für Zambretti |
+| `forecast_hours` / `forecast_days` | `12` / `7` | Länge der stündlichen / täglichen Vorhersage |
+| `show_zambretti`, `show_pressure_chart`, `show_risks`, `show_weather_forecast` | `true` | Bereiche im Reiter *Prognose* |
+| `windrose_metric` | `freq` | Windrose zeigt `freq` (Häufigkeit), `speed` (Geschwindigkeit) oder `bft` (Stärke) |
+| `show_rose_metric_switch`, `show_rose_now` | `true` | Umschalter in der Karte / aktueller Wind über der Rose |
+| `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Farben (Hex) |
 | `windrose_mode` | `wind` | Windrose nach `wind` (Mittelwind) oder `gust` (Böen) |
 | `skin_type` | `2` | Hauttyp I–VI (1–6) für die Sonnenbrandzeit |
 | `sunshine_threshold` | `120` | Ab wie viel W/m² Sonnenschein zählt (WMO) |
