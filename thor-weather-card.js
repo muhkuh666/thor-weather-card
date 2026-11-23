@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.7.0";
+const CARD_VERSION = "1.8.0";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -67,6 +67,8 @@ const DEFAULTS = {
   windrose_metric: "freq", // freq | speed | bft
   show_rose_metric_switch: true,
   show_rose_now: true,
+  show_rose_sun: true,
+  show_rose_moon: true,
   // Prognose
   forecast_model: "zambretti", // zambretti | simple
   hemisphere: "auto", // auto | north | south
@@ -221,6 +223,7 @@ const T = {
     risks: "Hinweise", risk: { nfrost: "Frost heute Nacht", pollen: "Pollen", fog: "Nebel", frost: "Frost / Glätte", dew: "Tau", storm: "Sturm", heat: "Hitze", uv: "UV", thunder: "Gewitterneigung", none: "Keine Auffälligkeiten" },
     lvl: ["gering", "möglich", "wahrscheinlich", "hoch"],
     wx_hourly: "Stündlich", wx_daily: "Täglich", wx_from: "Vorhersage von", wx_none: "Keine Vorhersage – Wetter-Entität im Editor wählen (z. B. DWD, Met.no).",
+    sm: { sun: "Sonne", moon: "Mond", el: "Höhe", lit: "beleuchtet", below: "unter dem Horizont", phases: ["Neumond", "zunehmende Sichel", "erstes Viertel", "zunehmender Mond", "Vollmond", "abnehmender Mond", "letztes Viertel", "abnehmende Sichel"] },
     rose_now: "Jetzt", rose_metric: { freq: "Häufigkeit", speed: "Geschwindigkeit", bft: "Stärke (Bft)" }, rose_avg_hint: "Ø je Richtung · Linie = Maximum · Deckkraft = Häufigkeit",
     pollen: "Pollenflug", pollen_hist: "Pollen-Verlauf", pollen_top: "Am stärksten", pollen_mine: "deine Allergene", pollen_free: "Heute und in den nächsten Tagen kein Pollenflug.",
     pollen_none: "Keine Pollen-Sensoren gefunden – z. B. die Integration „DWD Pollenflug“ (HACS) installieren oder Sensoren im Editor wählen.",
@@ -315,6 +318,7 @@ const T = {
     risks: "Alerts", risk: { nfrost: "Frost tonight", pollen: "Pollen", fog: "Fog", frost: "Frost / ice", dew: "Dew", storm: "Storm", heat: "Heat", uv: "UV", thunder: "Thunderstorm tendency", none: "Nothing notable" },
     lvl: ["low", "possible", "likely", "high"],
     wx_hourly: "Hourly", wx_daily: "Daily", wx_from: "Forecast from", wx_none: "No forecast – pick a weather entity in the editor (e.g. Met.no).",
+    sm: { sun: "Sun", moon: "Moon", el: "elevation", lit: "lit", below: "below the horizon", phases: ["New moon", "Waxing crescent", "First quarter", "Waxing gibbous", "Full moon", "Waning gibbous", "Last quarter", "Waning crescent"] },
     rose_now: "Now", rose_metric: { freq: "Frequency", speed: "Speed", bft: "Force (Bft)" }, rose_avg_hint: "Ø per direction · line = maximum · opacity = frequency",
     pollen: "Pollen", pollen_hist: "Pollen history", pollen_top: "Strongest", pollen_mine: "your allergens", pollen_free: "No pollen today or in the next days.",
     pollen_none: "No pollen sensors found – e.g. install the \"DWD Pollenflug\" integration (HACS) or pick sensors in the editor.",
@@ -701,6 +705,33 @@ function sunTimes(t, lat, lon) {
   return { noon, rise: noon - H * 4 * 60000, set: noon + H * 4 * 60000 };
 }
 
+/** Mondposition und -phase nach dem SunCalc-Verfahren (V. Agafonkin, BSD-Lizenz) */
+function moonPos(t, lat, lon) {
+  const R = Math.PI / 180, e = R * 23.4397;
+  const d = t / 86400000 - 0.5 + 2440588 - 2451545;
+  const ra = (l, b) => Math.atan2(Math.sin(l) * Math.cos(e) - Math.tan(b) * Math.sin(e), Math.cos(l));
+  const dec = (l, b) => Math.asin(Math.sin(b) * Math.cos(e) + Math.cos(b) * Math.sin(e) * Math.sin(l));
+  const L = R * (218.316 + 13.176396 * d), M = R * (134.963 + 13.064993 * d), F = R * (93.272 + 13.22935 * d);
+  const ml = L + R * 6.289 * Math.sin(M), mb = R * 5.128 * Math.sin(F), dist = 385001 - 20905 * Math.cos(M);
+  const m = { ra: ra(ml, mb), dec: dec(ml, mb) };
+  const phi = R * lat, lw = R * -lon;
+  const H = R * (280.16 + 360.9856235 * d) - lw - m.ra;
+  let h = Math.asin(Math.sin(phi) * Math.sin(m.dec) + Math.cos(phi) * Math.cos(m.dec) * Math.cos(H));
+  const hh = h < 0 ? 0 : h;
+  h += 0.0002967 / Math.tan(hh + 0.00312536 / (hh + 0.08901179)); // Refraktion
+  const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(m.dec) * Math.cos(phi));
+  // Beleuchtung
+  const SM = R * (357.5291 + 0.98560028 * d);
+  const C = R * (1.9148 * Math.sin(SM) + 0.02 * Math.sin(2 * SM) + 0.0003 * Math.sin(3 * SM));
+  const sl = SM + C + R * 102.9372 + Math.PI;
+  const s = { ra: ra(sl, 0), dec: dec(sl, 0) };
+  const sdist = 149598000;
+  const ph = Math.acos(Math.sin(s.dec) * Math.sin(m.dec) + Math.cos(s.dec) * Math.cos(m.dec) * Math.cos(s.ra - m.ra));
+  const inc = Math.atan2(sdist * Math.sin(ph), dist - sdist * Math.cos(ph));
+  const ang = Math.atan2(Math.cos(s.dec) * Math.sin(s.ra - m.ra), Math.sin(s.dec) * Math.cos(m.dec) - Math.cos(s.dec) * Math.sin(m.dec) * Math.cos(s.ra - m.ra));
+  return { az: norm360((az * 180) / Math.PI + 180), el: (h * 180) / Math.PI, frac: (1 + Math.cos(inc)) / 2, phase: 0.5 + (0.5 * inc * (ang < 0 ? -1 : 1)) / Math.PI };
+}
+
 /** Klarhimmel-Globalstrahlung nach Haurwitz (W/m²) */
 function clearSky(el) {
   const cz = Math.sin(rad(el));
@@ -1038,6 +1069,63 @@ class ThorWeatherCard extends HTMLElement {
     } catch (e) {
       return {};
     }
+  }
+
+  /** Sonne und Mond für die Windrose */
+  _sunMoon() {
+    const c = this._config;
+    const loc = this._loc();
+    const now = Date.now();
+    const out = {};
+    if (c.show_rose_sun) {
+      const p = this._sunNow();
+      if (p && ok(p.az)) out.sun = p;
+    }
+    if (c.show_rose_moon && loc) out.moon = moonPos(now, loc.lat, loc.lon);
+    return out;
+  }
+
+  _moonIcon(cx, cy, r, m) {
+    // beleuchteter Teil: Rand-Halbkreis + Terminator-Ellipse; zunehmend rechts hell (Nordhalbkugel)
+    const waxing = m.phase < 0.5;
+    const lightRight = this._south() ? !waxing : waxing;
+    const k = m.frac;
+    const rx = Math.abs(2 * k - 1) * r;
+    const top = `${cx},${(cy - r).toFixed(2)}`, bot = `${cx},${(cy + r).toFixed(2)}`;
+    const s1 = lightRight ? 1 : 0;
+    const s2 = k > 0.5 ? s1 : 1 - s1;
+    const lit = k < 0.02 ? "" : k > 0.98 ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#f1f0e6"/>` : `<path d="M${top} A${r},${r} 0 0 ${s1} ${bot} A${rx.toFixed(2)},${r} 0 0 ${s2} ${top} Z" fill="#f1f0e6"/>`;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#4b5563"/>${lit}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#9ca3af" stroke-width=".8"/>`;
+  }
+
+  _sunMoonMarks(sm, cx, cy, rr) {
+    const t = this._t;
+    let s = "";
+    const mark = (p, draw, label) => {
+      const up = p.el >= 0;
+      const [x, y] = pt(cx, cy, rr, p.az);
+      const [lx, ly] = pt(cx, cy, rr - 14, p.az);
+      s += `<line x1="${cx}" y1="${cy}" x2="${lx.toFixed(1)}" y2="${ly.toFixed(1)}" stroke="${label === "sun" ? "#f59e0b" : "#9ca3af"}" stroke-width="1" stroke-dasharray="2 3" opacity="${up ? 0.7 : 0.3}"/>`;
+      s += `<g opacity="${up ? 1 : 0.45}"><title>${esc(label === "sun" ? t.sm.sun : t.sm.moon)} · ${Math.round(p.az)}° ${this._cardinal(p.az)} · ${esc(t.sm.el)} ${this._fmt(p.el, 1)}°${up ? "" : ` (${esc(t.sm.below)})`}</title>${draw(x, y, up)}</g>`;
+    };
+    if (sm.sun) mark(sm.sun, (x, y, up) => {
+      let rays = "";
+      for (let k = 0; k < 8; k++) { const [a1, b1] = pt(x, y, 8.5, k * 45), [a2, b2] = pt(x, y, 12, k * 45); rays += `<line x1="${a1.toFixed(1)}" y1="${b1.toFixed(1)}" x2="${a2.toFixed(1)}" y2="${b2.toFixed(1)}" stroke="#f59e0b" stroke-width="1.6" stroke-linecap="round"/>`; }
+      return `${up ? rays : ""}<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6.5" fill="${up ? "#fbbf24" : "none"}" stroke="#f59e0b" stroke-width="1.6" ${up ? "" : 'stroke-dasharray="2 2"'}/>`;
+    }, "sun");
+    if (sm.moon) mark(sm.moon, (x, y, up) => `${this._moonIcon(+x.toFixed(1), +y.toFixed(1), 7, sm.moon)}${up ? "" : `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="8.5" fill="none" stroke="#9ca3af" stroke-dasharray="2 2"/>`}`, "moon");
+    return s;
+  }
+
+  _sunMoonLine(sm) {
+    const t = this._t;
+    if (!sm.sun && !sm.moon) return "";
+    const part = (p, icon, name, extra) => `<span><ha-icon icon="${icon}"></ha-icon>${esc(name)} <b>${Math.round(p.az)}° ${this._cardinal(p.az)}</b> · ${esc(t.sm.el)} ${this._fmt(p.el, 1)}°${p.el < 0 ? ` <span class="muted">(${esc(t.sm.below)})</span>` : ""}${extra || ""}</span>`;
+    const ph = sm.moon ? Math.round(sm.moon.phase * 8) % 8 : 0;
+    return `<div class="rnow smline">
+      ${sm.sun ? part(sm.sun, "mdi:white-balance-sunny", t.sm.sun) : ""}
+      ${sm.moon ? part(sm.moon, ["mdi:moon-new", "mdi:moon-waxing-crescent", "mdi:moon-first-quarter", "mdi:moon-waxing-gibbous", "mdi:moon-full", "mdi:moon-waning-gibbous", "mdi:moon-last-quarter", "mdi:moon-waning-crescent"][ph], t.sm.moon, ` · ${esc(t.sm.phases[ph])} ${Math.round(sm.moon.frac * 100)} % ${esc(t.sm.lit)}`) : ""}
+    </div>`;
   }
 
   /** Geschwindigkeit (km/h) als Zahl in Anzeigeeinheit (bei Beaufort in km/h) */
@@ -3605,6 +3693,8 @@ class ThorWeatherCard extends HTMLElement {
     }
     s += `<circle cx="${cx}" cy="${cy}" r="${r0}" class="calm"/><text x="${cx}" y="${cy + 1}" class="calm-t">${st ? Math.round(st.calmPct) + "%" : "–"}</text>`;
     const dir = this._val("wind_direction_entity");
+    const sm = this._sunMoon();
+    s += this._sunMoonMarks(sm, cx, cy, R - 13);
     if (ok(dir)) s += this._arrow(cx, cy, R + 2, dir, "var(--thor-accent)", 8);
 
     const legend = ROSE_CLASSES.map((lo, i) => {
@@ -3619,6 +3709,7 @@ class ThorWeatherCard extends HTMLElement {
       <div class="panel-t row"><span>${esc(t.rose)}${gustMode ? ` · <span style="color:var(--thor-gust)">${esc(t.gust_mode)}</span>` : ""}</span>${st && st.top >= 0 ? `<span class="small muted">${esc(t.rose_top)}: <b>${this._cardinal(st.top * 22.5)}</b> · ${esc(t.rose_calm)} ${Math.round(st.calmPct)} %</span>` : ""}</div>
       ${c.show_rose_now ? this._roseNow() : ""}
       ${st ? `<svg viewBox="0 0 300 300" class="rose">${s}</svg>` : `<div class="empty">${esc(this._loading ? t.loading : R0.stats ? t.no_dir_stats : t.nodata)}</div>`}
+      ${this._sunMoonLine(sm)}
       ${spdMode ? "" : `<div class="legend center small">${legend}${unit}</div>`}
       ${spdMode ? `<div class="small muted center">${esc(t.rose_avg_hint)}${metric === "speed" ? ` · ${esc(this._speed(1).u)}` : " · Bft"}</div>` : ""}
       ${c.show_rose_metric_switch ? `<div class="pbtns">${["freq", "speed", "bft"].map((m) => `<button class="pbtn ${m === metric ? "on" : ""}" data-rmetric="${m}">${esc(t.rose_metric[m])}</button>`).join("")}</div>` : ""}
@@ -4051,6 +4142,8 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .wxc ha-icon { --mdc-icon-size: 26px; color: var(--thor-blue); }
 .rnow { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 14px; font-size:.85em; margin-bottom:4px; }
 .rnow ha-icon { --mdc-icon-size: 16px; color: var(--thor-blue); vertical-align:-3px; margin-right:3px; }
+.smline ha-icon { color: #f59e0b !important; }
+.smline span + span ha-icon { color: #9ca3af !important; }
 .rnow i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
 /* Pollen */
 .psums { display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; }
@@ -4157,7 +4250,7 @@ const ED = {
       skin_type: "Hauttyp", sunshine_threshold: "Sonnenschein ab",
       title: "Titel", icon: "Symbol", show_header: "Kopfzeile", layout: "Layout", default_tab: "Start-Reiter", tabs: "Reiter / Abschnitte", language: "Sprache",
       show_hero: "Übersicht (Jetzt)", show_gauges: "Zeigerinstrumente", show_temps: "Temperatur-Kacheln", show_uv: "UV-Pyramide",
-      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", windrose_metric: "Windrose: Darstellung", show_rose_metric_switch: "Windrose: Umschalter Häufigkeit/Geschw./Stärke", show_rose_now: "Windrose: aktueller Wind",
+      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", windrose_metric: "Windrose: Darstellung", show_rose_metric_switch: "Windrose: Umschalter Häufigkeit/Geschw./Stärke", show_rose_now: "Windrose: aktueller Wind", show_rose_sun: "Windrose: Sonnenposition", show_rose_moon: "Windrose: Mondposition",
       weather_entity: "Wetter-Entität (Vorhersage)", forecast_model: "Prognosemodell", hemisphere: "Halbkugel", forecast_hours: "Stunden in der Vorhersage", forecast_days: "Tage in der Vorhersage",
       show_zambretti: "Lokale Prognose (Zambretti)", show_pressure_chart: "Luftdruck-Trend", show_risks: "Hinweise (Nebel, Frost, Sturm …)", show_weather_forecast: "Vorhersage der Wetter-Entität",
       show_season: "Jahreszeit (Reiter Jahr)", show_season_chip: "Jahreszeit in der Übersicht", show_bft_scale: "Beaufort-Säulen (Wind & Böen)", season_type: "Jahreszeit zählt",
@@ -4230,7 +4323,7 @@ const ED = {
       skin_type: "Skin type", sunshine_threshold: "Sunshine from",
       title: "Title", icon: "Icon", show_header: "Header", layout: "Layout", default_tab: "Start tab", tabs: "Tabs / sections", language: "Language",
       show_hero: "Overview (now)", show_gauges: "Dial gauges", show_temps: "Temperature tiles", show_uv: "UV pyramid",
-      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", windrose_metric: "Wind rose: display", show_rose_metric_switch: "Wind rose: frequency/speed/force switch", show_rose_now: "Wind rose: current wind",
+      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", windrose_metric: "Wind rose: display", show_rose_metric_switch: "Wind rose: frequency/speed/force switch", show_rose_now: "Wind rose: current wind", show_rose_sun: "Wind rose: sun position", show_rose_moon: "Wind rose: moon position",
       weather_entity: "Weather entity (forecast)", forecast_model: "Forecast model", hemisphere: "Hemisphere", forecast_hours: "Hours in forecast", forecast_days: "Days in forecast",
       show_zambretti: "Local forecast (Zambretti)", show_pressure_chart: "Pressure trend", show_risks: "Alerts (fog, frost, storm …)", show_weather_forecast: "Weather entity forecast",
       show_season: "Season (Year tab)", show_season_chip: "Season in overview", show_bft_scale: "Beaufort columns (wind & gusts)", season_type: "Season counts",
@@ -4418,6 +4511,7 @@ class ThorWeatherCardEditor extends HTMLElement {
           { name: "show_windrose", selector: bool }, { name: "show_wind_values", selector: bool },
           { name: "show_gust_chart", selector: bool }, { name: "show_rose_now", selector: bool },
           { name: "show_rose_metric_switch", selector: bool },
+          { name: "show_rose_sun", selector: bool }, { name: "show_rose_moon", selector: bool },
           { name: "show_sun_arc", selector: bool }, { name: "show_sun_uv", selector: bool },
           { name: "show_radiation", selector: bool }, { name: "show_sun_chart", selector: bool },
           { name: "show_rain", selector: bool }, { name: "show_rain_chart", selector: bool },

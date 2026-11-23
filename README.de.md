@@ -68,6 +68,7 @@
 - **Diagramm Wind & Böen (24 h)**: Mittelwind (10-Minuten-Mittel) als Fläche, Böen (10-Minuten-Maximum) als Linie, Beaufort-Achse, Spitzenböe markiert
 - **Richtungsmittel für Stunde, Tag, Monat und Jahr** (Vektormittel – nicht das falsche arithmetische Mittel) plus **Hauptrichtung** und **Beständigkeit**
 - **Windrose** in der Karte umschaltbar zwischen **Häufigkeit**, **Geschwindigkeit** und **Stärke (Beaufort)** – Geschwindigkeit/Stärke zeigen das Mittel je Richtung, das Maximum als Bogen und die Häufigkeit als Deckkraft; aktueller Wind, Böen und Beaufort stehen immer über der Rose
+- **Sonnen- und Mondposition** auf der Windrose: Sonnenscheibe und Mond in seiner echten Phase in der aktuellen Himmelsrichtung, blass, wenn unter dem Horizont; Azimut, Höhe, Mondphase und Beleuchtung unter der Rose
 - 16 Sektoren, gestapelt nach Beaufort-Klassen, Windstille in der Mitte, wählbaren Zeiträumen (1 Stunde … 30 Tage) und umschaltbar zwischen **Mittelwind und Böen**
 - Optional **Hausbild** hinter Kompass und Windrose – gleiche Optionen wie bei der [Helios Compass Card](https://github.com/muhkuh666/helios-compass-card)
 - Windwerte-Liste: Grad, Beaufort, km/h · m/s · Knoten · mph, Böen, stärkste Böe der letzten 24 h, Durchschnittsgeschwindigkeiten
@@ -220,6 +221,7 @@ image_opacity: 0.55
 | `forecast_hours` / `forecast_days` | `12` / `7` | Länge der stündlichen / täglichen Vorhersage |
 | `show_zambretti`, `show_pressure_chart`, `show_risks`, `show_weather_forecast` | `true` | Bereiche im Reiter *Prognose* |
 | `windrose_metric` | `freq` | Windrose zeigt `freq` (Häufigkeit), `speed` (Geschwindigkeit) oder `bft` (Stärke) |
+| `show_rose_sun`, `show_rose_moon` | `true` | Sonnen- / Mondposition auf der Windrose |
 | `show_rose_metric_switch`, `show_rose_now` | `true` | Umschalter in der Karte / aktueller Wind über der Rose |
 | `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Farben (Hex) |
 | `windrose_mode` | `wind` | Windrose nach `wind` (Mittelwind) oder `gust` (Böen) |

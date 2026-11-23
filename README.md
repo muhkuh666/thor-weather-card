@@ -68,6 +68,7 @@
 - **Wind & gusts chart (24 h)**: 10‑minute mean wind as area, 10‑minute max gust as line, Beaufort axis, peak gust marked
 - **Direction means for hour, day, month and year** (vector mean, not the wrong arithmetic mean) plus **prevailing direction** and **steadiness**
 - **Wind rose** switchable in the card between **frequency**, **speed** and **force (Beaufort)** – speed/force show the mean per direction, the maximum as an arc and the frequency as opacity; current wind, gusts and Beaufort always shown above the rose
+- **Sun and moon position** on the wind rose: sun disc and moon in its real phase at their current compass direction, faded when below the horizon; azimuth, elevation, moon phase and illumination below the rose
 - 16 sectors stacked by Beaufort class, calm percentage in the centre, selectable periods (1 h … 30 days) and switchable between **mean wind and gusts**
 - Optional **house image** behind compass and wind rose – same options as the [Helios Compass Card](https://github.com/muhkuh666/helios-compass-card)
 - Wind values list: degrees, Beaufort, km/h · m/s · knots · mph, gusts, max gust in 24 h, average speeds
@@ -220,6 +221,7 @@ image_opacity: 0.55
 | `forecast_hours` / `forecast_days` | `12` / `7` | Length of the hourly / daily forecast |
 | `show_zambretti`, `show_pressure_chart`, `show_risks`, `show_weather_forecast` | `true` | Sections of the *Forecast* tab |
 | `windrose_metric` | `freq` | Wind rose shows `freq` (frequency), `speed` or `bft` (force) |
+| `show_rose_sun`, `show_rose_moon` | `true` | Sun / moon position on the wind rose |
 | `show_rose_metric_switch`, `show_rose_now` | `true` | Switch in the card / current wind above the rose |
 | `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Colours (hex) |
 | `windrose_mode` | `wind` | Wind rose by `wind` (mean wind) or `gust` |
