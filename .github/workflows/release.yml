@@ -1,0 +1,48 @@
+name: Release
+# Erstellt automatisch Tag + Release, sobald CARD_VERSION in thor-weather-card.js erhöht wird –
+# aber nur, wenn die HACS-Validierung vorher erfolgreich war.
+on:
+  push:
+    branches: [main]
+    paths:
+      - thor-weather-card.js
+      - .github/workflows/release.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: plugin
+  release:
+    needs: hacs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version auslesen
+        id: v
+        run: |
+          VERSION=$(grep -oP 'CARD_VERSION = "\K[^"]+' thor-weather-card.js)
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release v$VERSION existiert bereits – nichts zu tun."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Release erstellen
+        if: steps.v.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: thor-weather-card.js
+          body_path: .github/release-notes.md
+          make_latest: true

@@ -1,0 +1,14 @@
+name: Feature request / Idee
+description: Suggest an idea for the card · Schlage eine Idee vor
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea · Deine Idee
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help? · Wofür ist das nützlich?

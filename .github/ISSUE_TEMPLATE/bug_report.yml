@@ -1,0 +1,38 @@
+name: Bug report / Fehler melden
+description: Something doesn't work as expected · Etwas funktioniert nicht wie erwartet
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Card version · Kartenversion
+      description: Shown in the browser console (BATTERY-DAY-CARD vX.Y.Z)
+    validations:
+      required: true
+  - type: input
+    id: ha
+    attributes:
+      label: Home Assistant version
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? · Was ist passiert?
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Card configuration (YAML) · Kartenkonfiguration
+      render: yaml
+  - type: textarea
+    id: sensors
+    attributes:
+      label: Sensors · Sensoren
+      description: Unit and state_class of the weather sensors (Developer tools → States)
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console errors · Fehler in der Browser-Konsole
+      render: text
