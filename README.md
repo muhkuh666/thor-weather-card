@@ -27,6 +27,22 @@
 - **Alerts**: fog, frost / black ice, dew, storm (gusts or rapid pressure fall), thunderstorm tendency, heat and UV – each with level and the values behind it
 - Optional **forecast of a weather entity** (e.g. Met.no, DWD): hourly and daily with temperature, precipitation, probability and wind
 
+**Climate** *(from your long-term statistics, up to 30 years back)*
+- **Records & extremes**: highest/lowest temperature, warmest/coldest day, wettest day and month, strongest gust, highest/lowest pressure, sunniest day – plus **this calendar day in earlier years** with a 🏆 when today sets a new record, and a **monthly records** table
+- **Climate stripes** of your own station (each month vs. its average) and a **year comparison** table – year to date (fair) or whole years: mean, extremes, rain, sunshine, summer/frost/rain days
+- **Calendar heatmap**: the whole year day by day for temperature, rain, sunshine or gusts, selectable years
+
+**Home & garden**
+- **Vegetation**: grassland temperature sum and start of vegetation (DWD, 200 °C) vs. last year, last spring and first autumn frost, frost-free period, growing degree days
+- **Heating & cooling degree days** (G20/15, VDI 3807) per month for the heating season vs. last season – "the weather caused 4 % less heating demand"
+- **Ventilation & mould risk**: absolute humidity indoor vs. outdoor ("airing pays off now"), indoor dew point, estimated coldest wall spot (fRsi) with mould risk, comfort diagram with the last 24 h
+- **Garden water balance**: rain minus evaporation (ET₀ Makkink from your radiation sensor, otherwise Hargreaves) over 7/14/30 days with a watering recommendation that considers forecast rain
+
+**More in Forecast & Rain**
+- **Night frost forecast** (dew point method, sky and wind, combined with the weather entity forecast): minimum at 2 m and near the ground, tips for car, plants, pipes, black ice
+- **Biometeorology**: circulation, headache, airways, joints from pressure and temperature jumps, heat, sultriness, cold stimulus, damp cold and pollen
+- **Rain analysis**: heavy rain per DWD thresholds (1 h / 6 h), recent rain events with duration and intensity, longest dry and wet spells
+
 **Pollen**
 - Works out of the box with **[DWD Pollenflug](https://github.com/mampfes/hacs_dwd_pollenflug)** (sensors are found automatically); other sources (Google Pollen UPI 0–5, grains/m³, text levels) are converted to the same 0–3 scale
 - Today, tomorrow and the day after per pollen type, overall level and trend; **your allergens** are highlighted and drive the overall level, the overview chip and the alerts
@@ -67,16 +83,25 @@
 - The last selection is remembered per chart
 
 **General**
-- Tabs (*Now · Forecast · Sun · Pollen · Wind · Rain · Year*) – the pollen tab only appears when pollen sensors exist
+- Tabs (*Now · Forecast · Sun · Pollen · Wind · Rain · Year · Climate · Home & garden*), scrollable – the pollen tab only appears when pollen sensors exist
 - **Every option** can be set in the visual editor, incl. colours (accent, wind, gusts, needle) or everything stacked, each section can be switched off
 - Fully configurable in the **visual card editor**, German and English, light & dark themes
 - Click any value to open the Home Assistant *more info* dialog
 
 ## Screenshots
 
-| Now | Forecast | Sun | Pollen | Wind | Rain | Year |
-|---|---|---|---|---|---|---|
-| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/forecast.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/pollen.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
+| Now | Forecast | Sun | Pollen | Wind | Rain | Year | Climate | Home |
+|---|---|---|---|---|---|---|---|---|
+| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/forecast.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/pollen.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/climate.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/home.png" width="180"> |
+
+## Notifications (blueprints)
+
+| Blueprint | What it does | Import |
+|---|---|---|
+| Frost | Evening warning when frost is likely tonight (dew point method) and when it freezes | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmuhkuh666%2Fthor-weather-card%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmuhkuh666%2Fthor_frost.yaml) |
+| Storm | Gusts above a limit (default 62 km/h) and optionally rapid pressure fall | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmuhkuh666%2Fthor-weather-card%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmuhkuh666%2Fthor_storm.yaml) |
+| Rain | Rain start after a dry period, heavy rain above a rain rate | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmuhkuh666%2Fthor-weather-card%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmuhkuh666%2Fthor_rain.yaml) |
+| Pollen | Morning message for your allergens, evening forecast for tomorrow | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmuhkuh666%2Fthor-weather-card%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmuhkuh666%2Fthor_pollen.yaml) |
 
 ## Installation
 
@@ -162,7 +187,7 @@ image_opacity: 0.55
 | Option | Default | Description |
 |---|---|---|
 | `layout` | `tabs` | `tabs` or `stack` (all sections one after another) |
-| `tabs` | `[now, forecast, sun, pollen, wind, rain, year]` | Which tabs/sections and in which order |
+| `tabs` | `[now, forecast, sun, pollen, wind, rain, year, climate, home]` | Which tabs/sections and in which order |
 | `default_tab` | `now` | Tab shown first |
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Switch individual sections on/off |
 | `minmax_mode` | `24h` | Min/max over the last 24 h or `today` (since midnight) |
@@ -171,6 +196,10 @@ image_opacity: 0.55
 | `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, 1y]` | Period buttons of the wind & gusts chart |
 | `rain_periods` / `sun_periods` | `[7d, 14d, 30d, 1y, summer, winter]` | Period buttons of the precipitation / sunshine chart |
 | `windrose_default`, `wind_chart_default`, `rain_default`, `sun_default` | `24h`, `24h`, `14d`, `14d` | Period shown first (the last choice is remembered in the browser) |
+| `climate_years` | `10` | Years of long-term statistics for records, stripes, calendar (2–30) |
+| `show_records`, `show_stripes`, `show_calendar`, `show_vegetation`, `show_degree_days`, `show_indoor_climate`, `show_water_balance`, `show_night_frost`, `show_bio`, `show_rain_analysis` | `true` | Analyses on/off |
+| `heating_indoor` / `heating_limit` / `cooling_base` | `20` / `15` / `18` | Degree days G20/15 and cooling degree days (°C) |
+| `mold_frsi` | `0.7` | Wall temperature factor for the mould risk (DIN 4108-2: 0.7) |
 | `pollen_entities` | auto | Pollen sensors – empty = all `sensor.pollenflug_*` (DWD Pollenflug) |
 | `pollen_allergies` | | Your allergens – highlighted, determine the overall level |
 | `pollen_scale` | `auto` | `auto`, `dwd` (0–3), `upi` (0–5), `ppm` (grains/m³) |

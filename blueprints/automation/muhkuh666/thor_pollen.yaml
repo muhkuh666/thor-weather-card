@@ -1,0 +1,83 @@
+blueprint:
+  name: Pollen alert (Thor Weather Card)
+  description: >-
+    Daily morning message when your allergens reach a level – works with DWD Pollenflug
+    (state 0–3, attributes state_tomorrow). Optionally also the forecast for tomorrow in the evening.
+    Tägliche Meldung am Morgen, wenn deine Allergene eine Stufe erreichen – passend zu DWD Pollenflug
+    (Wert 0–3, Attribut state_tomorrow). Optional abends die Vorhersage für morgen.
+    Part of https://github.com/muhkuh666/thor-weather-card
+  domain: automation
+  source_url: https://github.com/muhkuh666/thor-weather-card/blob/main/blueprints/automation/muhkuh666/thor_pollen.yaml
+  input:
+    pollen_entities:
+      name: Your allergens / Deine Allergene
+      selector:
+        entity:
+          domain: sensor
+          multiple: true
+    level:
+      name: "Notify from level / Melden ab Stufe (0–3)"
+      description: 1 = low, 1.5 = low to moderate, 2 = moderate, 3 = high. 1 = gering, 2 = mittel, 3 = hoch.
+      default: 1.5
+      selector:
+        number: { min: 0.5, max: 3, step: 0.5 }
+    morning_time:
+      name: Morning / Morgens
+      default: "07:00:00"
+      selector:
+        time: {}
+    evening:
+      name: Evening forecast for tomorrow / Abends Vorhersage für morgen
+      default: true
+      selector:
+        boolean: {}
+    evening_time:
+      name: Evening / Abends
+      default: "19:30:00"
+      selector:
+        time: {}
+    notify_device:
+      name: Phone / Handy (Home Assistant Companion App)
+      selector:
+        device:
+          integration: mobile_app
+
+mode: single
+
+variables:
+  pollen_entities: !input pollen_entities
+  level: !input level
+  evening: !input evening
+  desc: ["keine", "keine bis gering", "gering", "gering bis mittel", "mittel", "mittel bis hoch", "hoch"]
+
+trigger:
+  - platform: time
+    at: !input morning_time
+    id: today
+  - platform: time
+    at: !input evening_time
+    id: tomorrow
+
+condition:
+  - condition: template
+    value_template: "{{ trigger.id == 'today' or evening }}"
+
+action:
+  - variables:
+      hits: >-
+        {% set ns = namespace(out=[]) %}
+        {% for e in pollen_entities %}
+          {% set v = (states(e) if trigger.id == 'today' else state_attr(e, 'state_tomorrow')) | float(-1) %}
+          {% if v >= level | float(1.5) %}
+            {% set n = state_attr(e, 'friendly_name') | default(e, true) | regex_replace('^[Pp]ollenflug\\s*', '') | regex_replace('\\s*\\d+$', '') %}
+            {% set ns.out = ns.out + [n ~ ': ' ~ desc[(v * 2) | int(0)]] %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.out }}
+  - condition: template
+    value_template: "{{ hits | count > 0 }}"
+  - domain: mobile_app
+    type: notify
+    device_id: !input notify_device
+    title: "🌼 Thor – Pollen {{ 'heute' if trigger.id == 'today' else 'morgen' }}"
+    message: "{{ hits | join(', ') }}"

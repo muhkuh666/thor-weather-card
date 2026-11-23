@@ -1,0 +1,93 @@
+blueprint:
+  name: Rain start & heavy rain (Thor Weather Card)
+  description: >-
+    Notifies when it starts raining after a dry period (close the windows, bring in the washing)
+    and when heavy rain sets in (rain rate above a threshold, DWD: from about 15 mm/h).
+    Meldet Regenbeginn nach einer trockenen Phase (Fenster zu, Wäsche rein) und Starkregen
+    (Regenrate über Grenze, DWD: ab etwa 15 mm/h).
+    Part of https://github.com/muhkuh666/thor-weather-card
+  domain: automation
+  source_url: https://github.com/muhkuh666/thor-weather-card/blob/main/blueprints/automation/muhkuh666/thor_rain.yaml
+  input:
+    rate_entity:
+      name: Rain rate / Regenrate (mm/h)
+      selector:
+        entity:
+          domain: sensor
+    dry_minutes:
+      name: "Dry before / Vorher trocken (min)"
+      description: Only notify about rain start if it was dry this long. Regenbeginn nur melden, wenn es so lange trocken war.
+      default: 60
+      selector:
+        number: { min: 10, max: 720, step: 10, unit_of_measurement: min }
+    heavy_limit:
+      name: "Heavy rain from / Starkregen ab (mm/h)"
+      default: 15
+      selector:
+        number: { min: 2, max: 60, step: 1, unit_of_measurement: "mm/h" }
+    notify_start:
+      name: Notify rain start / Regenbeginn melden
+      default: true
+      selector:
+        boolean: {}
+    notify_heavy:
+      name: Notify heavy rain / Starkregen melden
+      default: true
+      selector:
+        boolean: {}
+    notify_device:
+      name: Phone / Handy (Home Assistant Companion App)
+      selector:
+        device:
+          integration: mobile_app
+    quiet_start:
+      name: Quiet hours start / Ruhezeit ab (rain start only / nur Regenbeginn)
+      default: "22:00:00"
+      selector:
+        time: {}
+    quiet_end:
+      name: Quiet hours end / Ruhezeit bis
+      default: "22:00:00"
+      selector:
+        time: {}
+
+mode: single
+max_exceeded: silent
+
+variables:
+  notify_start: !input notify_start
+  notify_heavy: !input notify_heavy
+  heavy_limit: !input heavy_limit
+  dry_minutes: !input dry_minutes
+  quiet_start: !input quiet_start
+  quiet_end: !input quiet_end
+
+trigger:
+  - platform: state
+    entity_id: !input rate_entity
+    from: ["0", "0.0", "0.00"]
+    id: start
+  - platform: numeric_state
+    entity_id: !input rate_entity
+    above: !input heavy_limit
+    id: heavy
+
+condition:
+  - condition: template
+    value_template: >-
+      {% if trigger.id == 'heavy' %}{{ notify_heavy }}
+      {% else %}
+        {% set s = quiet_start[:5] %}{% set e = quiet_end[:5] %}{% set n = now().strftime('%H:%M') %}
+        {% set quiet = false if s == e else ((s <= n < e) if s < e else (n >= s or n < e)) %}
+        {{ notify_start and not quiet and (trigger.to_state.state | float(0)) > 0
+           and (now() - trigger.from_state.last_changed).total_seconds() >= (dry_minutes | default(60)) * 60 }}
+      {% endif %}
+
+action:
+  - domain: mobile_app
+    type: notify
+    device_id: !input notify_device
+    title: "{{ '⛈️ Thor – Starkregen' if trigger.id == 'heavy' else '🌧️ Thor – Regen' }}"
+    message: >-
+      {% if trigger.id == 'heavy' %}Starkregen: {{ trigger.to_state.state | float(0) | round(1) }} mm/h (Grenze {{ heavy_limit }} mm/h).
+      {% else %}Es fängt an zu regnen ({{ trigger.to_state.state | float(0) | round(1) }} mm/h) – Fenster schließen, Wäsche rein.{% endif %}

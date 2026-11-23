@@ -1,0 +1,81 @@
+blueprint:
+  name: Storm warning (Thor Weather Card)
+  description: >-
+    Notification when gusts exceed a threshold (default 62 km/h = Beaufort 8, gale) and optionally
+    when the pressure falls rapidly. For the pressure part create a "Derivative" helper of your
+    pressure sensor (unit hPa/h, time window 1 h). Meldung bei Sturmböen (Standard 62 km/h = 8 Bft)
+    und optional bei schnellem Luftdruckfall – dafür einen Helfer „Ableitung“ des Luftdrucks anlegen
+    (Einheit hPa/h, Zeitfenster 1 h).
+    Part of https://github.com/muhkuh666/thor-weather-card
+  domain: automation
+  source_url: https://github.com/muhkuh666/thor-weather-card/blob/main/blueprints/automation/muhkuh666/thor_storm.yaml
+  input:
+    gust_entity:
+      name: Wind gusts / Windböen (km/h)
+      selector:
+        entity:
+          domain: sensor
+    gust_limit:
+      name: "Gust limit / Böen-Grenze (km/h)"
+      default: 62
+      selector:
+        number: { min: 30, max: 150, step: 1, unit_of_measurement: "km/h" }
+    pressure_rate_entity:
+      name: Pressure change / Luftdruck-Änderung (hPa/h, optional)
+      default: []
+      selector:
+        entity:
+          domain: sensor
+    pressure_rate_limit:
+      name: "Warn when falling faster than / Warnen bei Fall schneller als (hPa/h)"
+      default: 1.2
+      selector:
+        number: { min: 0.5, max: 5, step: 0.1, unit_of_measurement: "hPa/h" }
+    notify_device:
+      name: Phone / Handy (Home Assistant Companion App)
+      selector:
+        device:
+          integration: mobile_app
+    cooldown:
+      name: "Pause between notifications / Pause zwischen Meldungen (h)"
+      default: 3
+      selector:
+        number: { min: 1, max: 24, step: 1, unit_of_measurement: h }
+
+mode: single
+max_exceeded: silent
+
+variables:
+  gust_limit: !input gust_limit
+  rate_limit: !input pressure_rate_limit
+  rate_entity: !input pressure_rate_entity
+
+trigger_variables:
+  rate_entity: !input pressure_rate_entity
+  rate_max: !input pressure_rate_limit
+
+trigger:
+  - platform: numeric_state
+    entity_id: !input gust_entity
+    above: !input gust_limit
+    id: gust
+  - platform: template
+    value_template: >-
+      {{ rate_entity is string and rate_entity != '' and (states(rate_entity) | float(0)) <= -(rate_max | float(1.2)) }}
+    for: { minutes: 20 }
+    id: pressure
+
+condition:
+  - condition: template
+    value_template: "{{ trigger.id in ['gust', 'pressure'] }}"
+
+action:
+  - domain: mobile_app
+    type: notify
+    device_id: !input notify_device
+    title: "🌪️ Thor – Sturm"
+    message: >-
+      {% if trigger.id == 'gust' %}Sturmböe {{ trigger.to_state.state | float(0) | round(0) }} km/h (Grenze {{ gust_limit }} km/h).
+      {% else %}Luftdruck fällt schnell ({{ states(rate_entity) | float(0) | round(1) }} hPa/h) – Sturm oder Unwetter möglich.{% endif %}
+  - delay:
+      hours: !input cooldown

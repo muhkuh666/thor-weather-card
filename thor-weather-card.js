@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.4.0";
+const CARD_VERSION = "1.5.0";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -51,7 +51,7 @@ const DEFAULTS = {
   show_header: true,
   layout: "tabs", // tabs | stack
   default_tab: "now", // now | wind | rain | year
-  tabs: ["now", "forecast", "sun", "pollen", "wind", "rain", "year"],
+  tabs: ["now", "forecast", "sun", "pollen", "wind", "rain", "year", "climate", "home"],
   language: "auto",
   // Bereiche
   show_hero: true,
@@ -100,6 +100,22 @@ const DEFAULTS = {
   pollen_history_days: 30,
   show_pollen: true,
   show_pollen_history: true,
+  // Auswertungen
+  climate_years: 10,
+  show_records: true,
+  show_stripes: true,
+  show_calendar: true,
+  show_vegetation: true,
+  show_degree_days: true,
+  show_indoor_climate: true,
+  show_water_balance: true,
+  show_night_frost: true,
+  show_bio: true,
+  show_rain_analysis: true,
+  heating_indoor: 20,
+  heating_limit: 15,
+  cooling_base: 18,
+  mold_frsi: 0.7,
   // Optionen
   minmax_mode: "24h", // 24h | today
   wind_unit: "auto", // auto | km/h | m/s | kn | mph | bft
@@ -128,7 +144,9 @@ const DEFAULTS = {
 
 const ENTITY_KEYS = Object.keys(DEFAULTS).filter((k) => k.endsWith("_entity"));
 const HIST_KEYS = ENTITY_KEYS.filter((k) => k !== "sun_entity");
-const ALL_TABS = ["now", "forecast", "sun", "pollen", "wind", "rain", "year"];
+const ALL_TABS = ["now", "forecast", "sun", "pollen", "wind", "rain", "year", "climate", "home"];
+const satVap = (T) => 6.112 * Math.exp((17.62 * T) / (243.12 + T)); // hPa
+const absHum = (T, rh) => (216.7 * ((rh / 100) * satVap(T))) / (273.15 + T); // g/m³
 // Pollen: DWD-Skala 0–3 in halben Stufen
 const POLLEN_COLORS = ["#4caf50", "#9ccc65", "#ffeb3b", "#ffc107", "#ff9800", "#f4511e", "#c62828"];
 const POLLEN_WORDS = { none: 0, keine: 0, kein: 0, "very low": 0.5, "sehr gering": 0.5, low: 1, gering: 1, niedrig: 1, moderate: 2, medium: 2, mittel: 2, "mäßig": 2, high: 3, hoch: 3, "very high": 3, "sehr hoch": 3 };
@@ -161,7 +179,7 @@ const T = {
     fc_title: "Lokale Prognose", fc_model: "Modell", fc_next: "für die nächsten ~12 Stunden", fc_inputs: "Eingangswerte", season: "Jahreszeit", season_s: "Sommerhalbjahr", season_w: "Winterhalbjahr",
     wind_corr: "Windkorrektur", trend3h: "Tendenz 3 h", fc_need: "Für die Prognose wird ein Luftdruck-Sensor gebraucht.",
     press_chart: "Luftdruck – 24 h & Trend", press_extra: "Trend +6 h",
-    risks: "Hinweise", risk: { pollen: "Pollen", fog: "Nebel", frost: "Frost / Glätte", dew: "Tau", storm: "Sturm", heat: "Hitze", uv: "UV", thunder: "Gewitterneigung", none: "Keine Auffälligkeiten" },
+    risks: "Hinweise", risk: { nfrost: "Frost heute Nacht", pollen: "Pollen", fog: "Nebel", frost: "Frost / Glätte", dew: "Tau", storm: "Sturm", heat: "Hitze", uv: "UV", thunder: "Gewitterneigung", none: "Keine Auffälligkeiten" },
     lvl: ["gering", "möglich", "wahrscheinlich", "hoch"],
     wx_hourly: "Stündlich", wx_daily: "Täglich", wx_from: "Vorhersage von", wx_none: "Keine Vorhersage – Wetter-Entität im Editor wählen (z. B. DWD, Met.no).",
     rose_now: "Jetzt", rose_metric: { freq: "Häufigkeit", speed: "Geschwindigkeit", bft: "Stärke (Bft)" }, rose_avg_hint: "Ø je Richtung · Linie = Maximum · Deckkraft = Häufigkeit",
@@ -174,7 +192,30 @@ const T = {
       humid: "Hohe Luftfeuchte – Pollen werden schwer und sinken ab.", dry_wind: "Trocken und windig – Pollen werden weit verteilt, Belastung eher höher.", wind: "Kräftiger Wind verteilt Pollen stärker.",
       cold: "Kühle Luft – Pflanzen geben wenig Pollen ab.", air_city: "Lüften in der Stadt am besten früh morgens (ca. 6–8 Uhr).", air_rural: "Lüften auf dem Land am besten abends (ca. 19–24 Uhr).",
       trend_up: "Morgen wird es stärker.", trend_down: "Morgen wird es schwächer.", trend_same: "Morgen ähnlich wie heute." },
-    tabs: { now: "Jetzt", forecast: "Prognose", sun: "Sonne", pollen: "Pollen", wind: "Wind", rain: "Regen", year: "Jahr" },
+    rec: { title: "Rekorde & Extreme", since: "Messung seit", tmax: "Höchste Temperatur", tmin: "Tiefste Temperatur", warm_day: "Wärmster Tag (Ø)", cold_day: "Kältester Tag (Ø)", wet_day: "Nassester Tag", wet_month: "Nassester Monat",
+      gust: "Stärkste Böe", p_hi: "Höchster Luftdruck", p_lo: "Tiefster Luftdruck", sun_day: "Sonnigster Tag", this_day: "Dieser Tag in früheren Jahren:", year1: "Jahr", years: "Jahre", day_hi: "Rekordhoch", day_lo: "Rekordtief", today: "Heute",
+      new_hi: "Neuer Tagesrekord – so warm war es an diesem Tag noch nie!", new_lo: "Neuer Tagesrekord – so kalt war es an diesem Tag noch nie!", months: "Monatsrekorde", rain_day_s: "Regen/Tag mm" },
+    stripes: { title: "Klimastreifen & Jahresvergleich", hint: "Jeder Streifen ein Monat: blau = kälter, rot = wärmer als der Durchschnitt dieses Monats an deiner Station", vs: "ggü. Ø der Vorjahre",
+      cmp: "Jahre im Vergleich", ytd: "Bis heute (gleicher Zeitraum)", full: "Ganzes Jahr", partial: "unvollständiges Jahr (Messbeginn oder Lücken)" },
+    cal: { title: "Kalender", temp: "Temperatur", sun: "Sonne" },
+    veg: { title: "Vegetation & Garten", hint: "nach DWD", gts: "Grünlandtemperatursumme", start: "Vegetationsbeginn", not_yet: "noch nicht", days_vs: "T. ggü. Vj.", last_frost: "Letzter Frost (Frühjahr)", first_frost: "Erster Frost (Herbst)",
+      frost_free: "Frostfreie Zeit", gdd: "Wachstumsgradtage (>5 °C)", d: "Tage", curve: "Grünlandtemperatursumme bis Mai" },
+    dd: { title: "Heiz- & Kühlgradtage", g: "Gradtagzahl", vs_prev: "ggü. Vorjahr bis heute", heat_days: "Heiztage", cdd: "Kühlgradtage", season: "Heizperiode ab 1. Juli", prev: "Vorjahr",
+      less: "Das Wetter hat bisher {p} % weniger Heizbedarf verursacht als im Vorjahr.", more: "Das Wetter hat bisher {p} % mehr Heizbedarf verursacht als im Vorjahr.",
+      hint: "Gradtagzahl G{ti}/{tb} nach VDI 3807: Summe (Innentemperatur − Tagesmittel) an Tagen unter {tb} °C. Wetterbereinigter Vergleich für deinen Verbrauch." },
+    air: { title: "Lüften & Schimmelrisiko", need: "Dafür werden Innentemperatur und Luftfeuchte innen gebraucht.", v_dry: "Jetzt lüften lohnt sich – Außenluft ist {d} g/m³ trockener", v_some: "Lüften trocknet etwas", v_wet: "Lieber nicht lüften – Außenluft bringt {d} g/m³ mehr Feuchte", v_none: "Lüften ändert die Feuchte kaum", v_unknown: "Außenwerte fehlen",
+      after: "Außenluft hätte drinnen etwa {rh} % relative Feuchte.", ah_in: "Abs. Feuchte innen", ah_out: "Abs. Feuchte außen", dew_in: "Taupunkt innen", wall: "Kälteste Wandstelle", mold: "Schimmelrisiko", comfort: "Behaglichkeit", cf: ["behaglich", "noch behaglich", "unbehaglich"],
+      hint: "Wandtemperatur geschätzt mit Temperaturfaktor fRsi = {f} (DIN 4108-2). Ab 80 % Feuchte an der Wand kann Schimmel wachsen." },
+    wb: { title: "Garten-Wasserbilanz", no_need: "Kein Gießen nötig", water: "Gießen empfohlen: etwa {l} l/m²", rain_coming: "Trocken, aber {mm} mm Regen sind angesagt – abwarten", winter: "Defizit, aber Winterhalbjahr – Gießen meist unnötig",
+      basis: "Bilanz 7 Tage {b} mm (Verdunstung {et} mm)", bal: "Bilanz", fc: "Regen angesagt (2 Tage)", et: "Verdunstung ET₀", cum: "Bilanz kumuliert" },
+    nf: { title: "Nachtfrost", method: "Taupunkt-Methode", est: "Tiefstwert 2 m", ground: "Bodennähe", sky: "Himmel nachts", clear: "klar", calm: "schwach", windy: "windig", model: "Vorhersage (Tiefst)", last: "Letzte Nacht",
+      lvl: ["Kein Frost erwartet", "Bodenfrost möglich", "Frost erwartet", "Strenger Frost erwartet"], car: "Autoscheiben morgens wahrscheinlich gefroren", plants: "Empfindliche Pflanzen schützen", pipes: "Außenleitungen und Gartenwasser entleeren", ice: "Glätte möglich – nasse Flächen frieren" },
+    bio: { short: ["keine", "gering", "mäßig", "stark"], title: "Biowetter", lvl: ["kaum Einfluss", "geringe Belastung", "mäßige Belastung", "starke Belastung"], c_circ: "Kreislauf", c_head: "Kopfschmerz", c_resp: "Atemwege", c_joint: "Gelenke",
+      f_press: "Luftdruck {d} hPa in 24 h", f_temp: "Temperatursprung {d} K zum Vortag", f_heat: "Wärmebelastung", f_sultry: "Schwüle", f_cold: "Kältereiz", f_damp: "Nasskalte Luft",
+      calm: "Ruhige Wetterlage ohne besondere Reize.", note: "Einschätzung nach meteorologischen Faustregeln, keine medizinische Aussage." },
+    ra: { title: "Regen-Analyse", dwd: "Starkregen nach DWD-Schwellen", dry_now: "Trocken seit", dry_max: "Längste Trockenzeit", wet_max: "Längste Regenserie", until: "bis", heavy: "Starkregen", events: "Ereignisse", max1: "Max. 1 Stunde", max6: "Max. 6 Stunden",
+      recent: "Letzte Regenereignisse", cls: ["", "Starkregen", "Unwetter", "extrem"], need: "Für Ereignisse wird ein Regen-Zähler (Gesamt) mit Langzeitstatistik gebraucht." },
+    tabs: { now: "Jetzt", forecast: "Prognose", sun: "Sonne", pollen: "Pollen", climate: "Klima", home: "Haus & Garten", wind: "Wind", rain: "Regen", year: "Jahr" },
     sunrise: "Aufgang", sunset: "Untergang", daylength: "Tageslänge", noon: "Sonnenhöchststand", elevation: "Höhe", azimuth: "Azimut",
     vs_yesterday: "zu gestern", below_horizon: "Nacht", next_rise: "Nächster Aufgang",
     uv_curve: "UV heute", uv_dose: "UV-Dosis heute", sed: "SED", burn: "Sonnenbrand nach (ungeschützt)", skin: "Hauttyp", no_burn: "kein Risiko",
@@ -227,7 +268,7 @@ const T = {
     fc_title: "Local forecast", fc_model: "Model", fc_next: "for the next ~12 hours", fc_inputs: "Inputs", season: "Season", season_s: "summer half", season_w: "winter half",
     wind_corr: "Wind correction", trend3h: "Trend 3 h", fc_need: "The forecast needs a pressure sensor.",
     press_chart: "Pressure – 24 h & trend", press_extra: "trend +6 h",
-    risks: "Alerts", risk: { pollen: "Pollen", fog: "Fog", frost: "Frost / ice", dew: "Dew", storm: "Storm", heat: "Heat", uv: "UV", thunder: "Thunderstorm tendency", none: "Nothing notable" },
+    risks: "Alerts", risk: { nfrost: "Frost tonight", pollen: "Pollen", fog: "Fog", frost: "Frost / ice", dew: "Dew", storm: "Storm", heat: "Heat", uv: "UV", thunder: "Thunderstorm tendency", none: "Nothing notable" },
     lvl: ["low", "possible", "likely", "high"],
     wx_hourly: "Hourly", wx_daily: "Daily", wx_from: "Forecast from", wx_none: "No forecast – pick a weather entity in the editor (e.g. Met.no).",
     rose_now: "Now", rose_metric: { freq: "Frequency", speed: "Speed", bft: "Force (Bft)" }, rose_avg_hint: "Ø per direction · line = maximum · opacity = frequency",
@@ -240,7 +281,30 @@ const T = {
       humid: "High humidity – pollen gets heavy and settles.", dry_wind: "Dry and windy – pollen spreads widely, exposure rather higher.", wind: "Strong wind spreads pollen further.",
       cold: "Cool air – plants release little pollen.", air_city: "In town, air rooms early in the morning (about 6–8 am).", air_rural: "In the countryside, air rooms in the evening (about 7 pm–midnight).",
       trend_up: "Tomorrow gets stronger.", trend_down: "Tomorrow gets weaker.", trend_same: "Tomorrow similar to today." },
-    tabs: { now: "Now", forecast: "Forecast", sun: "Sun", pollen: "Pollen", wind: "Wind", rain: "Rain", year: "Year" },
+    rec: { title: "Records & extremes", since: "Data since", tmax: "Highest temperature", tmin: "Lowest temperature", warm_day: "Warmest day (Ø)", cold_day: "Coldest day (Ø)", wet_day: "Wettest day", wet_month: "Wettest month",
+      gust: "Strongest gust", p_hi: "Highest pressure", p_lo: "Lowest pressure", sun_day: "Sunniest day", this_day: "This day in earlier years:", year1: "year", years: "years", day_hi: "Record high", day_lo: "Record low", today: "Today",
+      new_hi: "New daily record – never this warm on this day!", new_lo: "New daily record – never this cold on this day!", months: "Monthly records", rain_day_s: "Rain/day mm" },
+    stripes: { title: "Climate stripes & year comparison", hint: "Each stripe one month: blue = colder, red = warmer than the average of that month at your station", vs: "vs. Ø earlier years",
+      cmp: "Years compared", ytd: "Year to date (same period)", full: "Whole year", partial: "incomplete year (start of records or gaps)" },
+    cal: { title: "Calendar", temp: "Temperature", sun: "Sun" },
+    veg: { title: "Vegetation & garden", hint: "per DWD", gts: "Grassland temperature sum", start: "Start of vegetation", not_yet: "not yet", days_vs: "days vs. last year", last_frost: "Last frost (spring)", first_frost: "First frost (autumn)",
+      frost_free: "Frost-free period", gdd: "Growing degree days (>5 °C)", d: "days", curve: "Grassland temperature sum until May" },
+    dd: { title: "Heating & cooling degree days", g: "Degree days", vs_prev: "vs. last year to date", heat_days: "Heating days", cdd: "Cooling degree days", season: "season from 1 July", prev: "last year",
+      less: "So far the weather caused {p} % less heating demand than last year.", more: "So far the weather caused {p} % more heating demand than last year.",
+      hint: "Degree days G{ti}/{tb} (VDI 3807): sum of (indoor temperature − daily mean) on days below {tb} °C. Weather-normalised comparison for your consumption." },
+    air: { title: "Ventilation & mould risk", need: "This needs indoor temperature and indoor humidity.", v_dry: "Airing pays off now – outdoor air is {d} g/m³ drier", v_some: "Airing dries a little", v_wet: "Better not air – outdoor air adds {d} g/m³ moisture", v_none: "Airing hardly changes humidity", v_unknown: "Outdoor values missing",
+      after: "Outdoor air would be about {rh} % relative humidity inside.", ah_in: "Abs. humidity in", ah_out: "Abs. humidity out", dew_in: "Dew point indoors", wall: "Coldest wall spot", mold: "Mould risk", comfort: "Comfort", cf: ["comfortable", "still comfortable", "uncomfortable"],
+      hint: "Wall temperature estimated with temperature factor fRsi = {f} (DIN 4108-2). Above 80 % humidity at the wall mould can grow." },
+    wb: { title: "Garden water balance", no_need: "No watering needed", water: "Watering recommended: about {l} l/m²", rain_coming: "Dry, but {mm} mm of rain is forecast – wait", winter: "Deficit, but winter half-year – watering rarely needed",
+      basis: "Balance 7 days {b} mm (evaporation {et} mm)", bal: "Balance", fc: "Rain forecast (2 days)", et: "Evaporation ET₀", cum: "Cumulative balance" },
+    nf: { title: "Night frost", method: "dew point method", est: "Minimum 2 m", ground: "Near ground", sky: "Sky at night", clear: "clear", calm: "light", windy: "windy", model: "Forecast (min)", last: "Last night",
+      lvl: ["No frost expected", "Ground frost possible", "Frost expected", "Severe frost expected"], car: "Car windows likely frozen in the morning", plants: "Protect sensitive plants", pipes: "Drain outdoor pipes and garden water", ice: "Black ice possible – wet surfaces freeze" },
+    bio: { short: ["none", "low", "moderate", "strong"], title: "Biometeorology", lvl: ["hardly any effect", "low strain", "moderate strain", "strong strain"], c_circ: "Circulation", c_head: "Headache", c_resp: "Airways", c_joint: "Joints",
+      f_press: "Pressure {d} hPa in 24 h", f_temp: "Temperature jump {d} K vs. yesterday", f_heat: "Heat stress", f_sultry: "Sultriness", f_cold: "Cold stimulus", f_damp: "Cold and damp air",
+      calm: "Calm weather without particular stimuli.", note: "Assessment based on meteorological rules of thumb, not medical advice." },
+    ra: { title: "Rain analysis", dwd: "Heavy rain per DWD thresholds", dry_now: "Dry for", dry_max: "Longest dry spell", wet_max: "Longest wet spell", until: "until", heavy: "Heavy rain", events: "events", max1: "Max. 1 hour", max6: "Max. 6 hours",
+      recent: "Recent rain events", cls: ["", "heavy rain", "severe", "extreme"], need: "Rain events need a rain counter (total) with long-term statistics." },
+    tabs: { now: "Now", forecast: "Forecast", sun: "Sun", pollen: "Pollen", climate: "Climate", home: "Home & garden", wind: "Wind", rain: "Rain", year: "Year" },
     sunrise: "Sunrise", sunset: "Sunset", daylength: "Day length", noon: "Solar noon", elevation: "Elevation", azimuth: "Azimuth",
     vs_yesterday: "vs. yesterday", below_horizon: "night", next_rise: "Next sunrise",
     uv_curve: "UV today", uv_dose: "UV dose today", sed: "SED", burn: "Sunburn after (unprotected)", skin: "Skin type", no_burn: "no risk",
@@ -679,6 +743,8 @@ class ThorWeatherCard extends HTMLElement {
     }
     for (const k of COLOR_KEYS) if (!hexToRgb(c[k])) c[k] = DEFAULTS[k];
     for (const k of ["pollen_entities", "pollen_allergies"]) c[k] = Array.isArray(c[k]) ? c[k].filter(Boolean) : c[k] ? [c[k]] : [];
+    c.climate_years = clamp(Math.round(num(c.climate_years) || 10), 2, 30);
+    for (const k of ["ycmp", "calY", "calM"]) if (this._sel[k] === undefined) this._sel[k] = this._load(k);
     c.pollen_history_days = clamp(Math.round(num(c.pollen_history_days) || 30), 7, 90);
     c.forecast_hours = clamp(Math.round(num(c.forecast_hours) || 12), 4, 48);
     c.forecast_days = clamp(Math.round(num(c.forecast_days) || 7), 2, 14);
@@ -1031,21 +1097,36 @@ class ThorWeatherCard extends HTMLElement {
     const now = Date.now();
     const y = new Date().getFullYear();
     const startLast = new Date(y - 1, 0, 1).getTime();
+    const wantLong = c.tabs.some((k) => k === "climate" || k === "home") || c.show_rain_analysis;
+    const startHist = wantLong ? Math.min(startLast, new Date(y - c.climate_years + 1, 0, 1).getTime()) : startLast;
     const rainId = c.rain_total_entity || c.rain_today_entity;
-    const wantClimate = c.show_climate_days || c.show_climate_chart || c.show_rain_chart || c.show_rain;
+    const wantClimate = c.show_climate_days || c.show_climate_chart || c.show_rain_chart || c.show_rain || wantLong;
     const wantWind = (c.show_wind_averages || c.show_windrose || c.show_gust_chart || c.show_wind_values) && (c.wind_direction_entity || c.wind_speed_entity);
     const radId = c[this._radKey()] || "";
     const wantSun = radId && (c.show_sun_chart || c.show_climate_days);
     const [tStats, rStats, wDir, wSpd, sStats, wGust] = await Promise.all([
-      wantClimate && c.outdoor_temp_entity ? this._stats([c.outdoor_temp_entity], startLast, now, "day", ["min", "max", "mean"]) : {},
-      wantClimate && rainId ? this._stats([rainId], startLast, now, "day", ["change", "max"]) : {},
+      wantClimate && c.outdoor_temp_entity ? this._stats([c.outdoor_temp_entity], startHist, now, "day", ["min", "max", "mean"]) : {},
+      wantClimate && rainId ? this._stats([rainId], startHist, now, "day", ["change", "max"]) : {},
       wantWind && c.wind_direction_entity ? this._stats([c.wind_direction_entity], now - 366 * DAY, now, "hour", ["mean"]) : {},
       wantWind && c.wind_speed_entity ? this._stats([c.wind_speed_entity], now - 366 * DAY, now, "hour", ["mean"]) : {},
       wantSun ? this._stats([radId], startLast, now, "hour", ["mean"]) : {},
       wantWind && c.wind_gust_entity ? this._stats([c.wind_gust_entity], now - 366 * DAY, now, "hour", ["max", "mean"]) : {},
     ]);
+    const [xGust, xWind, xPress, xRainH] = wantLong
+      ? await Promise.all([
+          c.wind_gust_entity ? this._stats([c.wind_gust_entity], startHist, now, "day", ["max"]) : {},
+          c.wind_speed_entity ? this._stats([c.wind_speed_entity], startHist, now, "day", ["mean", "max"]) : {},
+          c.pressure_entity ? this._stats([c.pressure_entity], startHist, now, "day", ["min", "max"]) : {},
+          c.show_rain_analysis && c.rain_total_entity ? this._stats([c.rain_total_entity], now - 366 * DAY, now, "hour", ["change"]) : {},
+        ])
+      : [{}, {}, {}, {}];
     if (token !== this._token) return;
+    const po = num(c.pressure_offset) || 0;
+    this._rainHourly = (xRainH[c.rain_total_entity] || []).filter((r) => ok(r.change) && r.change >= 0).map((r) => ({ start: r.start, v: this._rainMm(r.change) }));
     this._daily = {
+      gust: xGust[c.wind_gust_entity] || [],
+      wind: xWind[c.wind_speed_entity] || [],
+      press: (xPress[c.pressure_entity] || []).map((r) => ({ start: r.start, min: ok(r.min) ? r.min + po : NaN, max: ok(r.max) ? r.max + po : NaN })),
       temp: tStats[c.outdoor_temp_entity] || [],
       rain: (rStats[rainId] || []).map((r) => ({ start: r.start, v: ok(r.change) && c.rain_total_entity ? r.change : r.max })),
     };
@@ -1171,6 +1252,7 @@ class ThorWeatherCard extends HTMLElement {
   _days() {
     const d = this._daily;
     if (!d) return null;
+    if (this._daysCache && this._daysCache.at === this._renderAt) return this._daysCache.v;
     const map = new Map();
     const key = (t) => new Date(t).setHours(0, 0, 0, 0);
     for (const r of d.temp) {
@@ -1190,7 +1272,9 @@ class ThorWeatherCard extends HTMLElement {
     const rt = this._rainToday();
     if (ok(rt)) e.rain = rt;
     map.set(today, e);
-    return [...map.values()].sort((a, b) => a.t - b.t);
+    const v = [...map.values()].sort((a, b) => a.t - b.t);
+    this._daysCache = { at: this._renderAt, v };
+    return v;
   }
 
   _climate(days, year, until) {
@@ -1224,6 +1308,7 @@ class ThorWeatherCard extends HTMLElement {
 
   _render() {
     if (!this._config) return;
+    this._renderAt = Date.now() + Math.random();
     this._lastRender = Date.now();
     const c = this._config;
     const t = this._t;
@@ -1244,6 +1329,8 @@ class ThorWeatherCard extends HTMLElement {
 
     const vars = `--thor-accent:${c.accent_color};--thor-blue:${c.wind_color};--thor-gust:${c.gust_color};--thor-needle:${c.needle_color};`;
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card style="${vars}">${header}${tabs}<div class="body">${body}</div></ha-card>`;
+    const tb = this.shadowRoot.querySelector(".tabs"), on = tb?.querySelector(".tab.on");
+    if (tb && on && (on.offsetLeft < tb.scrollLeft || on.offsetLeft + on.offsetWidth > tb.scrollLeft + tb.clientWidth)) tb.scrollLeft = on.offsetLeft - 20;
     this.shadowRoot.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
       this._tab = b.dataset.tab;
       this._render();
@@ -1289,7 +1376,18 @@ class ThorWeatherCard extends HTMLElement {
       if (c.show_zambretti) parts.push(this._zambrettiPanel());
       if (c.show_pressure_chart && c.pressure_entity) parts.push(this._pressureChart());
       if (c.show_risks) parts.push(this._risks());
+      if (c.show_night_frost && c.outdoor_temp_entity) parts.push(this._nightFrost());
+      if (c.show_bio) parts.push(this._bio());
       if (c.show_weather_forecast) parts.push(this._weatherForecast());
+    } else if (tab === "climate") {
+      if (c.show_records) parts.push(this._records());
+      if (c.show_stripes) parts.push(this._stripes());
+      if (c.show_calendar) parts.push(this._calendar());
+    } else if (tab === "home") {
+      if (c.show_vegetation && c.outdoor_temp_entity) parts.push(this._vegetation());
+      if (c.show_degree_days && c.outdoor_temp_entity) parts.push(this._degreeDays());
+      if (c.show_indoor_climate) parts.push(this._indoorClimate());
+      if (c.show_water_balance && (c.rain_total_entity || c.rain_today_entity)) parts.push(this._waterBalance());
     } else if (tab === "pollen") {
       if (c.show_pollen) parts.push(this._pollen());
       if (c.show_pollen_history) parts.push(this._pollenHistory());
@@ -1307,6 +1405,7 @@ class ThorWeatherCard extends HTMLElement {
     } else if (tab === "rain") {
       if (c.show_rain) parts.push(this._rain());
       if (c.show_rain_chart) parts.push(this._rainChart());
+      if (c.show_rain_analysis) parts.push(this._rainAnalysis());
     } else if (tab === "year") {
       if (c.show_climate_days) parts.push(this._climateDays());
       if (c.show_climate_chart) parts.push(this._climateChart());
@@ -1739,6 +1838,11 @@ class ThorWeatherCard extends HTMLElement {
     const feels = this._config.feels_like_entity ? this._toC(this._val("feels_like_entity"), "feels_like_entity") : feelsLikeC(T0, rh, kmh);
     if (ok(feels) && feels >= 27) add("heat", feels >= 38 ? 3 : feels >= 32 ? 2 : 1, "mdi:thermometer-alert", `${t.feels} ${this._fmt(this._fromC(feels), 1)} ${unit}`);
     const uv = this._val("uv_entity");
+    if (this._config.show_night_frost) {
+      const nf = this._nightFrostCalc();
+      const h = new Date().getHours();
+      if (nf && (h >= 12 || h < 4) && nf.ground <= 0) add("nfrost", nf.est <= -5 ? 3 : nf.est <= 0 ? 2 : 1, "mdi:weather-night", `${this._t.nf.est} ${this._fmt(this._fromC(nf.est), 1)} · ${this._t.nf.ground} ${this._fmt(this._fromC(nf.ground), 1)} ${this._tempUnit()}`);
+    }
     {
       const pd = this._pollenData();
       const base = pd.some((d) => d.mine) ? pd.filter((d) => d.mine) : pd;
@@ -1936,6 +2040,681 @@ class ThorWeatherCard extends HTMLElement {
     return `<div class="panel"><div class="panel-t">${esc(t.pollen_hist)} · ${days} ${this._lang === "de" ? "Tage" : "days"}</div>
       <div class="hmap">${rows}<div class="hrow"><span></span><div class="hlbl small muted">${lbl}</div></div></div>
       <div class="legend center small">${legend}</div></div>`;
+  }
+
+  /* =========================================================== Auswertungen */
+
+  /** Tageswerte inkl. Wind, Druck, Sonne – für Klima, Haus & Garten */
+  _daysX() {
+    if (this._daysXCache && this._daysXCache.at === this._renderAt) return this._daysXCache.v;
+    const base = this._days();
+    if (!base) return null;
+    const map = new Map(base.map((d) => [d.t, { ...d }]));
+    const key = (t) => new Date(t).setHours(0, 0, 0, 0);
+    const put = (rows, fn) => {
+      for (const r of rows || []) {
+        const k = key(r.start);
+        const e = map.get(k) || { t: k };
+        fn(e, r);
+        map.set(k, e);
+      }
+    };
+    const fg = this._kmhFactor("wind_gust_entity"), fw = this._kmhFactor("wind_speed_entity");
+    put(this._daily?.gust, (e, r) => { if (ok(r.max)) e.gust = r.max * fg; });
+    put(this._daily?.wind, (e, r) => { if (ok(r.mean)) e.wind = r.mean * fw; if (ok(r.max)) e.windMax = r.max * fw; });
+    put(this._daily?.press, (e, r) => { if (ok(r.min)) e.pmin = r.min; if (ok(r.max)) e.pmax = r.max; });
+    if (this._radKey() && this._sunHourly) for (const [k, s] of this._sunDays()) { const e = map.get(k) || { t: k }; e.sun = s.h; e.sunKwh = s.kwh; map.set(k, e); }
+    const v = [...map.values()].sort((a, b) => a.t - b.t);
+    this._daysXCache = { at: this._renderAt, v };
+    return v;
+  }
+
+  _md(t) {
+    const d = new Date(t);
+    return d.getMonth() * 100 + d.getDate();
+  }
+
+  _yearsOf(days) {
+    return [...new Set(days.map((d) => new Date(d.t).getFullYear()))].sort((a, b) => a - b);
+  }
+
+  _tC(v) {
+    return `${this._fmt(this._fromC(v), 1)} ${this._tempUnit()}`;
+  }
+
+  _noLong() {
+    return `<div class="empty small">${esc(this._loading ? this._t.loading : this._t.no_stats)}</div>`;
+  }
+
+  /* --------------------------------------------------- Rekorde & Extreme */
+
+  _records() {
+    const t = this._t;
+    const days = this._daysX();
+    if (!days || !days.some((d) => ok(d.max))) return `<div class="panel"><div class="panel-t">${esc(t.rec.title)}</div>${this._noLong()}</div>`;
+    const today = new Date().setHours(0, 0, 0, 0);
+    const first = days.find((d) => ok(d.max) || ok(d.rain));
+    const best = (fn, cmp) => days.reduce((b, d) => { const v = fn(d); return ok(v) && (!b || cmp(v, b.v)) ? { t: d.t, v } : b; }, null);
+    const tiles = [];
+    const tile = (icon, col, label, v, date, key) => tiles.push(`<div class="rec" ${key ? `data-more="${key}"` : ""}><ha-icon icon="${icon}" style="color:${col}"></ha-icon><div><div class="small muted">${esc(label)}</div><div class="rv2">${v}</div><div class="small muted">${date ? this._date(date, { day: "2-digit", month: "2-digit", year: "numeric" }) : ""}</div></div></div>`);
+    const hi = best((d) => d.max, (a, b) => a > b), lo = best((d) => d.min, (a, b) => a < b);
+    if (hi) tile("mdi:thermometer-high", "#dc2626", t.rec.tmax, this._tC(hi.v), hi.t, "outdoor_temp_entity");
+    if (lo) tile("mdi:thermometer-low", "#2563eb", t.rec.tmin, this._tC(lo.v), lo.t, "outdoor_temp_entity");
+    const wmx = best((d) => d.mean, (a, b) => a > b), cmx = best((d) => d.mean, (a, b) => a < b);
+    if (wmx) tile("mdi:weather-sunny", "#f97316", t.rec.warm_day, this._tC(wmx.v), wmx.t);
+    if (cmx) tile("mdi:snowflake", "#60a5fa", t.rec.cold_day, this._tC(cmx.v), cmx.t);
+    const wet = best((d) => d.rain, (a, b) => a > b);
+    if (wet && wet.v > 0) tile("mdi:weather-pouring", "#3b82f6", t.rec.wet_day, `${this._fmt(wet.v, 1)} mm`, wet.t);
+    // nassester Monat
+    const months = new Map();
+    for (const d of days) if (ok(d.rain)) { const dt = new Date(d.t); const k = dt.getFullYear() * 12 + dt.getMonth(); months.set(k, (months.get(k) || 0) + d.rain); }
+    let wm = null;
+    for (const [k, v] of months) if (!wm || v > wm.v) wm = { k, v };
+    if (wm && wm.v > 0) tile("mdi:calendar-month", "#1d4ed8", t.rec.wet_month, `${this._fmt(wm.v, 0)} mm`, null), (tiles[tiles.length - 1] = tiles[tiles.length - 1].replace('<div class="small muted"></div></div></div>', `<div class="small muted">${t.months[wm.k % 12]} ${Math.floor(wm.k / 12)}</div></div></div>`));
+    const g = best((d) => d.gust, (a, b) => a > b);
+    if (g) { const s = this._speed(g.v); tile("mdi:weather-windy-variant", "#e8590c", t.rec.gust, `${s.v} ${s.u} · ${beaufort(g.v)} Bft`, g.t, "wind_gust_entity"); }
+    const ph = best((d) => d.pmax, (a, b) => a > b), pl = best((d) => d.pmin, (a, b) => a < b);
+    if (ph) tile("mdi:gauge-full", "#2e9d5b", t.rec.p_hi, `${this._fmt(ph.v, 1)} hPa`, ph.t, "pressure_entity");
+    if (pl) tile("mdi:gauge-empty", "#7c3aed", t.rec.p_lo, `${this._fmt(pl.v, 1)} hPa`, pl.t, "pressure_entity");
+    const sunB = best((d) => d.sun, (a, b) => a > b);
+    if (sunB && sunB.v > 0) tile("mdi:sun-clock", "#f59e0b", t.rec.sun_day, `${this._fmt(sunB.v, 1)} h`, sunB.t);
+
+    // Dieser Kalendertag in früheren Jahren
+    const md = this._md(today);
+    const same = days.filter((d) => this._md(d.t) === md && d.t !== today);
+    const td = days.find((d) => d.t === today) || {};
+    let dayRec = "";
+    if (same.length) {
+      const sh = same.reduce((b, d) => (ok(d.max) && (!b || d.max > b.max) ? d : b), null);
+      const sl = same.reduce((b, d) => (ok(d.min) && (!b || d.min < b.min) ? d : b), null);
+      const newHi = sh && ok(td.max) && td.max > sh.max, newLo = sl && ok(td.min) && td.min < sl.min;
+      dayRec = `<div class="drec">
+        <div class="panel-t small">${esc(t.rec.this_day)} ${this._date(today)} · ${same.length} ${esc(same.length === 1 ? t.rec.year1 : t.rec.years)}</div>
+        <div class="chips ex">
+          ${sh ? this._chip("mdi:arrow-up-bold", t.rec.day_hi, `${this._tC(sh.max)} (${new Date(sh.t).getFullYear()})`) : ""}
+          ${sl ? this._chip("mdi:arrow-down-bold", t.rec.day_lo, `${this._tC(sl.min)} (${new Date(sl.t).getFullYear()})`) : ""}
+          ${ok(td.max) ? this._chip("mdi:calendar-today", t.rec.today, `${this._tC(td.min)} … ${this._tC(td.max)}`) : ""}
+        </div>
+        ${newHi || newLo ? `<div class="badge-rec">🏆 ${esc(newHi ? t.rec.new_hi : t.rec.new_lo)}</div>` : ""}
+      </div>`;
+    }
+    // Monatsrekorde
+    const mrows = t.months.map((mn, m) => {
+      const ds = days.filter((d) => new Date(d.t).getMonth() === m);
+      if (!ds.length) return "";
+      const a = ds.reduce((b, d) => (ok(d.max) && (!b || d.max > b.max) ? d : b), null);
+      const b2 = ds.reduce((b, d) => (ok(d.min) && (!b || d.min < b.min) ? d : b), null);
+      const r = ds.reduce((b, d) => (ok(d.rain) && (!b || d.rain > b.rain) ? d : b), null);
+      const gg = ds.reduce((b, d) => (ok(d.gust) && (!b || d.gust > b.gust) ? d : b), null);
+      const y = (d) => `<span class="muted"> ’${String(new Date(d.t).getFullYear()).slice(2)}</span>`;
+      return `<tr class="${m === new Date().getMonth() ? "cur" : ""}"><td>${mn}</td>
+        <td style="color:${a ? tempColor(a.max) : ""}">${a ? `${this._fmt(this._fromC(a.max), 1)}${y(a)}` : "–"}</td>
+        <td style="color:${b2 ? tempColor(b2.min) : ""}">${b2 ? `${this._fmt(this._fromC(b2.min), 1)}${y(b2)}` : "–"}</td>
+        <td>${r && r.rain > 0 ? `${this._fmt(r.rain, 1)}${y(r)}` : "–"}</td>
+        ${days.some((d) => ok(d.gust)) ? `<td>${gg ? `${this._speed(gg.gust).v}${y(gg)}` : "–"}</td>` : ""}</tr>`;
+    }).join("");
+    const hasG = days.some((d) => ok(d.gust));
+    return `<div class="panel">
+      <div class="panel-t row"><span>${esc(t.rec.title)}</span><span class="small muted">${esc(t.rec.since)} ${first ? this._date(first.t, { month: "2-digit", year: "numeric" }) : "–"}</span></div>
+      <div class="recs">${tiles.join("")}</div>
+      ${dayRec}
+      <div class="panel-t small" style="margin-top:10px">${esc(t.rec.months)}</div>
+      <table class="rtab"><thead><tr><th></th><th>${esc(t.max)} ${esc(this._tempUnit())}</th><th>${esc(t.min)} ${esc(this._tempUnit())}</th><th>${esc(t.rec.rain_day_s)}</th>${hasG ? `<th>${esc(t.gusts)} ${esc(this._speed(10).u)}</th>` : ""}</tr></thead><tbody>${mrows}</tbody></table>
+    </div>`;
+  }
+
+  /* ------------------------------------------ Klimastreifen & Jahresvergleich */
+
+  _stripes() {
+    const t = this._t;
+    const days = this._daysX();
+    if (!days || !days.some((d) => ok(d.mean))) return `<div class="panel"><div class="panel-t">${esc(t.stripes.title)}</div>${this._noLong()}</div>`;
+    // Monatsmittel und Abweichung zum Mittel desselben Kalendermonats
+    const mm = new Map();
+    for (const d of days) {
+      if (!ok(d.mean)) continue;
+      const dt = new Date(d.t);
+      const k = dt.getFullYear() * 12 + dt.getMonth();
+      const e = mm.get(k) || { s: 0, n: 0 };
+      e.s += d.mean; e.n++;
+      mm.set(k, e);
+    }
+    const keys = [...mm.keys()].sort((a, b) => a - b).filter((k) => mm.get(k).n >= 10);
+    const clim = Array.from({ length: 12 }, (_, m) => {
+      const v = keys.filter((k) => k % 12 === m).map((k) => mm.get(k).s / mm.get(k).n);
+      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN;
+    });
+    const anom = keys.map((k) => ({ k, a: mm.get(k).s / mm.get(k).n - clim[k % 12], n: keys.filter((x) => x % 12 === k % 12).length }));
+    const maxA = Math.max(1.5, ...anom.map((x) => Math.abs(x.a)));
+    const col = (a) => {
+      const f = clamp(a / maxA, -1, 1);
+      const c0 = [247, 247, 247], c1 = f > 0 ? [178, 24, 43] : [33, 102, 172];
+      return `rgb(${c0.map((v, i) => Math.round(v + (c1[i] - v) * Math.abs(f))).join(",")})`;
+    };
+    const W = 320, H = 46;
+    const bw = W / Math.max(1, anom.length);
+    let s = anom.map((x, i) => `<rect x="${(i * bw).toFixed(2)}" y="0" width="${(bw + 0.3).toFixed(2)}" height="${H}" fill="${x.n > 1 ? col(x.a) : "#ddd"}"><title>${t.months[x.k % 12]} ${Math.floor(x.k / 12)}: ${x.a > 0 ? "+" : ""}${this._fmt(x.a, 1)} K</title></rect>`).join("");
+    const yearsLbl = anom.map((x, i) => (x.k % 12 === 0 ? `<text x="${(i * bw + 1).toFixed(1)}" y="${H + 9}" class="bl muted" text-anchor="start">${Math.floor(x.k / 12)}</text>` : "")).join("");
+    // Jahresvergleich: bis heute (gleicher Zeitraum) oder ganzes Jahr
+    const mode = this._sel.ycmp || "ytd";
+    const now = new Date();
+    const years = this._yearsOf(days).slice(-8).reverse();
+    const thr = this._config.rain_day_threshold;
+    const rows = years.map((y) => {
+      const ds = days.filter((d) => {
+        const dt = new Date(d.t);
+        if (dt.getFullYear() !== y) return false;
+        if (mode === "ytd") return dt.getMonth() < now.getMonth() || (dt.getMonth() === now.getMonth() && dt.getDate() <= now.getDate());
+        return true;
+      });
+      const T = ds.filter((d) => ok(d.mean));
+      const mean = T.length ? T.reduce((a, d) => a + d.mean, 0) / T.length : NaN;
+      const rain = ds.filter((d) => ok(d.rain)).reduce((a, d) => a + d.rain, 0);
+      const hasR = ds.some((d) => ok(d.rain));
+      const sun = ds.filter((d) => ok(d.sun)).reduce((a, d) => a + d.sun, 0);
+      const hasS = ds.some((d) => ok(d.sun));
+      return {
+        y, n: ds.length, mean, rain: hasR ? rain : NaN, sun: hasS ? sun : NaN,
+        hot: ds.filter((d) => d.max >= 25).length, frost: ds.filter((d) => d.min < 0).length, wet: ds.filter((d) => d.rain >= thr).length,
+        tmax: Math.max(...ds.map((d) => d.max).filter(ok)), tmin: Math.min(...ds.map((d) => d.min).filter(ok)),
+      };
+    }).filter((r) => r.n > 0);
+    const others = rows.filter((r) => r.y !== now.getFullYear() && ok(r.mean));
+    const avg = (k) => { const v = others.map((r) => r[k]).filter(ok); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+    const cur = rows.find((r) => r.y === now.getFullYear());
+    const dT = cur && ok(avg("mean")) ? cur.mean - avg("mean") : NaN;
+    const dR = cur && ok(avg("rain")) && avg("rain") > 0 ? (cur.rain / avg("rain") - 1) * 100 : NaN;
+    const hasSun = rows.some((r) => ok(r.sun));
+    const tbl = rows.map((r) => `<tr class="${r.y === now.getFullYear() ? "cur" : ""}"><td>${r.y}${r.n < (mode === "ytd" ? 300 : 360) && r.y !== now.getFullYear() ? `<span class="muted">*</span>` : ""}</td>
+      <td style="color:${tempColor(r.mean)}">${this._fmt(this._fromC(r.mean), 1)}</td><td>${ok(r.tmax) ? this._fmt(this._fromC(r.tmax), 1) : "–"}</td><td>${ok(r.tmin) ? this._fmt(this._fromC(r.tmin), 1) : "–"}</td>
+      <td>${ok(r.rain) ? this._fmt(r.rain, 0) : "–"}</td>${hasSun ? `<td>${ok(r.sun) ? this._fmt(r.sun, 0) : "–"}</td>` : ""}<td>${r.hot}</td><td>${r.frost}</td><td>${r.wet}</td></tr>`).join("");
+    const btn = (k, l) => `<button class="pbtn ${mode === k ? "on" : ""}" data-range="ycmp:${k}">${esc(l)}</button>`;
+    return `<div class="panel">
+      <div class="panel-t">${esc(t.stripes.title)}</div>
+      <svg viewBox="0 0 ${W} ${H + 12}" class="stripes">${s}${yearsLbl}</svg>
+      <div class="small muted center">${esc(t.stripes.hint)}</div>
+      ${cur && ok(dT) ? `<div class="chips ex">
+        ${this._chip("mdi:thermometer", `${now.getFullYear()} ${t.stripes.vs}`, `${dT > 0 ? "+" : ""}${this._fmt(dT, 1)} K`)}
+        ${ok(dR) ? this._chip("mdi:weather-rainy", `${t.rain} ${t.stripes.vs}`, `${dR > 0 ? "+" : ""}${this._fmt(dR, 0)} %`) : ""}
+      </div>` : ""}
+      <div class="panel-t small" style="margin-top:10px">${esc(t.stripes.cmp)}</div>
+      <div class="tscroll"><table class="rtab"><thead><tr><th></th><th>Ø ${esc(this._tempUnit())}</th><th>${esc(t.max)}</th><th>${esc(t.min)}</th><th>${esc(t.rain)} mm</th>${hasSun ? `<th>☀ h</th>` : ""}<th title="${esc(t.cd.summer)}">≥25°</th><th title="${esc(t.cd.frost)}">❄</th><th title="${esc(t.cd.rain)}">☂</th></tr></thead><tbody>${tbl}</tbody></table></div>
+      <div class="pbtns">${btn("ytd", t.stripes.ytd)}${btn("full", t.stripes.full)}</div>
+      ${rows.some((r) => r.n < 300 && r.y !== now.getFullYear()) ? `<div class="small muted">* ${esc(t.stripes.partial)}</div>` : ""}
+    </div>`;
+  }
+
+  /* ------------------------------------------------------ Kalender-Heatmap */
+
+  _calendar() {
+    const t = this._t;
+    const days = this._daysX();
+    if (!days || !days.length) return `<div class="panel"><div class="panel-t">${esc(t.cal.title)}</div>${this._noLong()}</div>`;
+    const years = this._yearsOf(days).slice(-5);
+    const y = years.includes(Number(this._sel.calY)) ? Number(this._sel.calY) : years[years.length - 1];
+    const metrics = [["temp", t.cal.temp], ["rain", t.rain], ...(days.some((d) => ok(d.sun)) ? [["sun", t.cal.sun]] : []), ...(days.some((d) => ok(d.gust) || ok(d.windMax)) ? [["wind", t.wind]] : [])];
+    const m = metrics.some(([k]) => k === this._sel.calM) ? this._sel.calM : "temp";
+    const byDay = new Map(days.map((d) => [d.t, d]));
+    const jan1 = new Date(y, 0, 1);
+    const off = (jan1.getDay() + 6) % 7; // Montag = 0
+    const cs = 6.2, gap = 1, L = 16, T0 = 12;
+    let s = "";
+    const val = (d) => (m === "temp" ? d?.mean : m === "rain" ? d?.rain : m === "sun" ? d?.sun : (d?.gust ?? d?.windMax));
+    const color = (v) => {
+      if (!ok(v)) return "var(--thor-off)";
+      if (m === "temp") return tempColor(v);
+      if (m === "rain") return v < 0.1 ? "rgba(127,127,127,.12)" : ["#dbeafe", "#93c5fd", "#3b82f6", "#1d4ed8", "#1e3a8a"][v < 1 ? 0 : v < 5 ? 1 : v < 10 ? 2 : v < 20 ? 3 : 4];
+      if (m === "sun") return v < 0.5 ? "rgba(127,127,127,.12)" : ["#fef3c7", "#fde68a", "#fbbf24", "#f59e0b", "#d97706"][v < 2 ? 0 : v < 4 ? 1 : v < 7 ? 2 : v < 10 ? 3 : 4];
+      return ROSE_COLORS[ROSE_CLASSES.reduce((k, l, j) => (v >= l ? j : k), 0)];
+    };
+    const fmtV = (v) => (!ok(v) ? "–" : m === "temp" ? this._tC(v) : m === "rain" ? `${this._fmt(v, 1)} mm` : m === "sun" ? `${this._fmt(v, 1)} h` : `${this._speed(v).v} ${this._speed(v).u}`);
+    const end = new Date(y, 11, 31).getTime();
+    let lastMonth = -1;
+    for (let tt = jan1.getTime(), i = 0; tt <= end; tt = new Date(tt + DAY + 12 * HOUR).setHours(0, 0, 0, 0), i++) {
+      const idx = i + off, w = Math.floor(idx / 7), dow = idx % 7;
+      const x = L + w * (cs + gap), yy = T0 + dow * (cs + gap);
+      const d = byDay.get(tt);
+      const fut = tt > Date.now();
+      s += `<rect x="${x.toFixed(1)}" y="${yy.toFixed(1)}" width="${cs}" height="${cs}" rx="1.2" fill="${fut ? "transparent" : color(val(d))}" ${fut ? 'stroke="var(--divider-color)" stroke-width=".4"' : ""}><title>${this._date(tt)}: ${fmtV(val(d))}</title></rect>`;
+      const mo = new Date(tt).getMonth();
+      if (mo !== lastMonth && new Date(tt).getDate() <= 7) { s += `<text x="${x.toFixed(1)}" y="8" class="bl muted" text-anchor="start">${t.months[mo]}</text>`; lastMonth = mo; }
+    }
+    ["Mo", "Mi", "Fr"].forEach((l, i) => (s += `<text x="0" y="${(T0 + i * 2 * (cs + gap) + cs - 1).toFixed(1)}" class="bl muted" text-anchor="start">${this._lang === "de" ? l : ["M", "W", "F"][i]}</text>`));
+    const W = L + 54 * (cs + gap), H = T0 + 7 * (cs + gap);
+    const legendVals = m === "temp" ? [-10, 0, 10, 20, 30] : m === "rain" ? [0.5, 2, 7, 15, 25] : m === "sun" ? [1, 3, 5, 8, 11] : [3, 8, 15, 25, 45];
+    const legend = legendVals.map((v) => `<span><i style="background:${color(v)}"></i>${m === "temp" ? `${this._fmt(this._fromC(v), 0)}°` : m === "wind" ? this._speed(v).v : v}</span>`).join("");
+    const btns = `<div class="pbtns">${years.map((yy) => `<button class="pbtn ${yy === y ? "on" : ""}" data-range="calY:${yy}">${yy}</button>`).join("")}</div>
+      <div class="pbtns">${metrics.map(([k, l]) => `<button class="pbtn ${k === m ? "on" : ""}" data-range="calM:${k}">${esc(l)}</button>`).join("")}</div>`;
+    return `<div class="panel"><div class="panel-t">${esc(t.cal.title)} ${y}</div>
+      <div class="tscroll"><svg viewBox="0 0 ${W} ${H}" class="cal" style="min-width:${Math.round(W * 1.15)}px">${s}</svg></div>
+      <div class="legend center small">${legend}${m === "rain" ? " mm" : m === "sun" ? " h" : m === "wind" ? ` ${esc(this._speed(1).u)} (${esc(t.gusts)})` : ""}</div>${btns}</div>`;
+  }
+
+  /* ------------------------------------------------------------- Vegetation */
+
+  _vegYear(days, y, until) {
+    let gts = 0, gdd = 0, vegStart = null, lastFrost = null, firstFrost = null, vegDays = 0;
+    const curve = [];
+    for (const d of days) {
+      const dt = new Date(d.t);
+      if (dt.getFullYear() !== y || (until && d.t > until)) continue;
+      const m = dt.getMonth();
+      if (ok(d.mean)) {
+        if (d.mean > 0) gts += d.mean * (m === 0 ? 0.5 : m === 1 ? 0.75 : 1);
+        if (d.mean > 5) { gdd += d.mean - 5; vegDays++; }
+        if (!vegStart && gts >= 200) vegStart = d.t;
+        curve.push({ doy: Math.floor((d.t - new Date(y, 0, 1)) / DAY), v: gts });
+      }
+      if (ok(d.min) && d.min < 0) {
+        if (m < 6) lastFrost = d.t;
+        else if (!firstFrost) firstFrost = d.t;
+      }
+    }
+    const frostFree = lastFrost && firstFrost ? Math.round((firstFrost - lastFrost) / DAY) - 1 : NaN;
+    return { gts, gdd, vegStart, lastFrost, firstFrost, frostFree, vegDays, curve };
+  }
+
+  _vegetation() {
+    const t = this._t;
+    const days = this._daysX();
+    if (!days || !days.some((d) => ok(d.mean))) return `<div class="panel"><div class="panel-t">${esc(t.veg.title)}</div>${this._noLong()}</div>`;
+    const now = new Date();
+    const y = now.getFullYear();
+    const cur = this._vegYear(days, y);
+    const sameDayLast = new Date(y - 1, now.getMonth(), now.getDate(), 23, 59).getTime();
+    const prev = this._vegYear(days, y - 1, sameDayLast);
+    const prevFull = this._vegYear(days, y - 1);
+    const hasPrev = prev.curve.length > 30;
+    const dfmt = (x) => (x ? this._date(x) : "–");
+    const diffDays = cur.vegStart && prevFull.vegStart ? Math.round(((cur.vegStart - new Date(y, 0, 1)) - (prevFull.vegStart - new Date(y - 1, 0, 1))) / DAY) : NaN;
+    const tiles = [
+      this._chip("mdi:sprout", t.veg.gts, `${this._fmt(cur.gts, 0)} °C${hasPrev ? ` · ${esc(t.last_year)} ${this._fmt(prev.gts, 0)}` : ""}`),
+      this._chip("mdi:flower-tulip", t.veg.start, cur.vegStart ? `${dfmt(cur.vegStart)}${ok(diffDays) ? ` (${diffDays > 0 ? "+" : ""}${diffDays} ${t.veg.days_vs})` : ""}` : `${t.veg.not_yet} (${this._fmt(cur.gts, 0)}/200)`),
+      this._chip("mdi:snowflake-melt", t.veg.last_frost, dfmt(cur.lastFrost)),
+      this._chip("mdi:snowflake-alert", t.veg.first_frost, now.getMonth() >= 6 ? dfmt(cur.firstFrost) : `${esc(t.last_year)}: ${dfmt(prevFull.firstFrost)}`),
+      this._chip("mdi:calendar-check", t.veg.frost_free, ok(cur.frostFree) ? `${cur.frostFree} ${t.veg.d}` : ok(prevFull.frostFree) ? `${esc(t.last_year)}: ${prevFull.frostFree} ${t.veg.d}` : "–"),
+      this._chip("mdi:leaf", t.veg.gdd, `${this._fmt(cur.gdd, 0)} K·d · ${cur.vegDays} ${t.veg.d}`),
+    ];
+    // GTS-Kurve bis Mitte Mai, Linie 200
+    const W = 320, H = 110, L = 28, top = 8, bot = 16, maxDoy = 150;
+    const mx = Math.max(250, ...cur.curve.filter((p) => p.doy <= maxDoy).map((p) => p.v), ...prevFull.curve.filter((p) => p.doy <= maxDoy).map((p) => p.v));
+    const X = (doy) => L + (doy / maxDoy) * (W - L), Y = (v) => top + (1 - v / mx) * (H - top - bot);
+    const path = (c) => c.filter((p) => p.doy <= maxDoy).map((p, i) => `${i ? "L" : "M"}${X(p.doy).toFixed(1)},${Y(p.v).toFixed(1)}`).join(" ");
+    let s = `<line x1="${L}" x2="${W}" y1="${Y(200).toFixed(1)}" y2="${Y(200).toFixed(1)}" stroke="#2e9d5b" stroke-dasharray="4 3"/><text x="${L + 2}" y="${(Y(200) - 4).toFixed(1)}" class="bl" text-anchor="start" fill="#2e9d5b">200 · ${esc(t.veg.start)}</text>`;
+    const vs = mx > 800 ? 400 : mx > 400 ? 200 : 100;
+    for (let v = 0; v <= mx; v += vs) s += `<text x="${L - 3}" y="${Y(v).toFixed(1)}" class="al" text-anchor="end">${v}</text>`;
+    [0, 31, 59, 90, 120].forEach((doy, i) => (s += `<text x="${X(doy + 14).toFixed(1)}" y="${H - 3}" class="bl muted">${t.months[i]}</text>`));
+    if (prevFull.curve.length) s += `<path d="${path(prevFull.curve)}" fill="none" stroke="#7cb342" stroke-width="1.4" stroke-dasharray="4 3" opacity=".7"/>`;
+    if (cur.curve.length) s += `<path d="${path(cur.curve)}" fill="none" stroke="#2e7d32" stroke-width="2"/>`;
+    s += `<line x1="${L}" x2="${W}" y1="${H - bot}" y2="${H - bot}" class="axis"/>`;
+    return `<div class="panel"><div class="panel-t row"><span>${esc(t.veg.title)} ${y}</span><span class="small muted">${esc(t.veg.hint)}</span></div>
+      <div class="chips ex">${tiles.join("")}</div>
+      <div class="panel-t small" style="margin-top:8px">${esc(t.veg.curve)}</div>
+      <svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg>
+      <div class="legend center small"><span><i style="background:#2e7d32"></i>${y}</span><span><i class="dash" style="background:repeating-linear-gradient(90deg,#7cb342 0 4px,transparent 4px 7px)"></i>${y - 1}</span></div>
+    </div>`;
+  }
+
+  /* --------------------------------------------------------------- Gradtage */
+
+  _degreeDays() {
+    const t = this._t;
+    const days = this._daysX();
+    if (!days || !days.some((d) => ok(d.mean))) return `<div class="panel"><div class="panel-t">${esc(t.dd.title)}</div>${this._noLong()}</div>`;
+    const c = this._config;
+    const ti = num(c.heating_indoor) || 20, tb = num(c.heating_limit) || 15, cb = num(c.cooling_base) || 18;
+    const now = new Date();
+    // Heizperiode 1.7.–30.6.
+    const sY = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+    const season = (y0, until) => {
+      const from = new Date(y0, 6, 1).getTime(), to = until ?? new Date(y0 + 1, 6, 1).getTime();
+      const months = Array.from({ length: 12 }, () => ({ g: 0, cdd: 0, hd: 0, n: 0 }));
+      let g = 0, cdd = 0, hd = 0, n = 0;
+      for (const d of days) {
+        if (d.t < from || d.t >= to || !ok(d.mean)) continue;
+        const mi = (new Date(d.t).getMonth() + 6) % 12;
+        n++; months[mi].n++;
+        if (d.mean < tb) { g += ti - d.mean; hd++; months[mi].g += ti - d.mean; months[mi].hd++; }
+        if (d.mean > cb) { cdd += d.mean - cb; months[mi].cdd += d.mean - cb; }
+      }
+      return { g, cdd, hd, n, months };
+    };
+    const curS = season(sY);
+    const lastSameDay = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate() + 1).getTime();
+    const prevS = season(sY - 1, lastSameDay);
+    const prevFull = season(sY - 1);
+    const pct = prevS.n > 20 && prevS.g > 0 ? (curS.g / prevS.g - 1) * 100 : NaN;
+    const mOrder = [6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5];
+    const W = 320, H = 120, padB = 16, top = 12;
+    const mx = Math.max(50, ...curS.months.map((m) => m.g), ...prevFull.months.map((m) => m.g));
+    const bw = W / 12;
+    let s = "";
+    mOrder.forEach((mo, i) => {
+      const a = prevFull.months[i].g, b = curS.months[i].g;
+      const x = i * bw;
+      if (a > 0) s += `<rect x="${(x + bw * 0.12).toFixed(1)}" y="${(H - padB - (a / mx) * (H - padB - top)).toFixed(1)}" width="${(bw * 0.36).toFixed(1)}" height="${((a / mx) * (H - padB - top)).toFixed(1)}" fill="#f97316" opacity=".3" rx="1.5"><title>${t.months[mo]} ${esc(t.dd.prev)}: ${this._fmt(a, 0)} Kd</title></rect>`;
+      if (b > 0) s += `<rect x="${(x + bw * 0.5).toFixed(1)}" y="${(H - padB - (b / mx) * (H - padB - top)).toFixed(1)}" width="${(bw * 0.36).toFixed(1)}" height="${((b / mx) * (H - padB - top)).toFixed(1)}" fill="#ea580c" rx="1.5"><title>${t.months[mo]}: ${this._fmt(b, 0)} Kd</title></rect>`;
+      s += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 3}" class="bl muted">${t.months[mo]}</text>`;
+    });
+    s += `<line x1="0" x2="${W}" y1="${H - padB}" y2="${H - padB}" class="axis"/>`;
+    const chips = [
+      this._chip("mdi:radiator", `${t.dd.g} ${sY}/${String(sY + 1).slice(2)}`, `${this._fmt(curS.g, 0)} Kd`),
+      this._chip("mdi:compare-horizontal", t.dd.vs_prev, ok(pct) ? `${pct > 0 ? "+" : ""}${this._fmt(pct, 0)} % (${this._fmt(prevS.g, 0)} Kd)` : "–"),
+      this._chip("mdi:calendar-today", t.dd.heat_days, `${curS.hd} ${t.veg.d}`),
+      this._chip("mdi:snowflake-thermometer", t.dd.cdd, `${this._fmt(curS.cdd, 0)} Kd${prevFull.n > 300 ? ` · ${esc(t.last_year)} ${this._fmt(prevFull.cdd, 0)}` : ""}`),
+    ];
+    return `<div class="panel"><div class="panel-t row"><span>${esc(t.dd.title)}</span><span class="small muted">G${ti}/${tb} · ${esc(t.dd.season)}</span></div>
+      <div class="chips ex">${chips.join("")}</div>
+      ${ok(pct) ? `<div class="small center" style="margin:6px 0">${esc(pct < 0 ? t.dd.less : t.dd.more).replace("{p}", this._fmt(Math.abs(pct), 0))}</div>` : ""}
+      <svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg>
+      <div class="legend center small"><span><i style="background:#ea580c"></i>${sY}/${String(sY + 1).slice(2)}</span><span><i style="background:#f97316;opacity:.35"></i>${sY - 1}/${String(sY).slice(2)}</span></div>
+      <div class="small muted">${esc(t.dd.hint.replaceAll("{ti}", ti).replaceAll("{tb}", tb))}</div></div>`;
+  }
+
+  /* --------------------------------------------------- Lüften & Schimmelrisiko */
+
+  _indoorClimate() {
+    const t = this._t;
+    const c = this._config;
+    const Ti = this._toC(this._val("indoor_temp_entity"), "indoor_temp_entity");
+    const RHi = this._val("indoor_humidity_entity");
+    const To = this._toC(this._val("outdoor_temp_entity"));
+    const RHo = this._val("humidity_entity");
+    if (!ok(Ti) || !ok(RHi)) return `<div class="panel"><div class="panel-t">${esc(t.air.title)}</div><div class="empty small">${esc(t.air.need)}</div></div>`;
+    const AHi = absHum(Ti, RHi), AHo = ok(To) && ok(RHo) ? absHum(To, RHo) : NaN;
+    // Was hätte Außenluft drinnen für eine relative Feuchte?
+    const rhIfVent = ok(AHo) ? clamp((AHo / absHum(Ti, 100)) * 100, 0, 100) : NaN;
+    const dAH = ok(AHo) ? AHo - AHi : NaN;
+    let verdict, vcls;
+    if (!ok(dAH)) { verdict = t.air.v_unknown; vcls = ""; }
+    else if (dAH <= -1.5) { verdict = t.air.v_dry.replace("{d}", this._fmt(-dAH, 1)); vcls = "good"; }
+    else if (dAH < -0.5) { verdict = t.air.v_some; vcls = "ok"; }
+    else if (dAH > 0.5) { verdict = t.air.v_wet.replace("{d}", this._fmt(dAH, 1)); vcls = "bad"; }
+    else { verdict = t.air.v_none; vcls = ""; }
+    const td = dewPointC(Ti, RHi);
+    // Wandoberfläche nach DIN 4108-2: fRsi = 0,7
+    const fr = clamp(num(c.mold_frsi) || 0.7, 0.5, 0.95);
+    const Tsi = ok(To) ? To + fr * (Ti - To) : NaN;
+    const rhWall = ok(Tsi) ? clamp((AHi / absHum(Tsi, 100)) * 100, 0, 100) : NaN;
+    const mold = !ok(rhWall) ? -1 : rhWall >= 80 ? 3 : rhWall >= 70 ? 2 : rhWall >= 60 ? 1 : 0;
+    const comfort = Ti >= 19 && Ti <= 24 && RHi >= 35 && RHi <= 65 ? 0 : Ti >= 17 && Ti <= 26 && RHi >= 30 && RHi <= 70 ? 1 : 2;
+    // Behaglichkeitsdiagramm
+    const W = 200, H = 150, L = 24, top = 6, bot = 18;
+    const X = (T) => L + ((clamp(T, 14, 30) - 14) / 16) * (W - L - 4), Y = (rh) => top + (1 - (clamp(rh, 10, 90) - 10) / 80) * (H - top - bot);
+    let s = `<rect x="${X(17)}" y="${Y(70)}" width="${X(26) - X(17)}" height="${Y(30) - Y(70)}" fill="#facc15" opacity=".18" rx="4"/>
+      <rect x="${X(19)}" y="${Y(65)}" width="${X(24) - X(19)}" height="${Y(35) - Y(65)}" fill="#22c55e" opacity=".25" rx="4"/>`;
+    for (let T = 14; T <= 30; T += 4) s += `<text x="${X(T)}" y="${H - 4}" class="bl muted">${this._fmt(this._fromC(T, "indoor_temp_entity"), 0)}°</text>`;
+    for (let rh = 20; rh <= 80; rh += 20) s += `<text x="${L - 3}" y="${Y(rh)}" class="al" text-anchor="end">${rh}%</text>`;
+    // Spur der letzten 24 h
+    const tp = this._series("indoor_temp_entity"), hp = this._series("indoor_humidity_entity");
+    if (tp.length && hp.length) {
+      for (let k = 24; k >= 1; k--) {
+        const tt = Date.now() - k * HOUR;
+        const a = this._toC(valueAt(tp, tt), "indoor_temp_entity"), b = valueAt(hp, tt);
+        if (ok(a) && ok(b)) s += `<circle cx="${X(a).toFixed(1)}" cy="${Y(b).toFixed(1)}" r="1.8" fill="var(--thor-blue)" opacity="${(0.15 + 0.5 * (1 - k / 24)).toFixed(2)}"/>`;
+      }
+    }
+    s += `<circle cx="${X(Ti).toFixed(1)}" cy="${Y(RHi).toFixed(1)}" r="5" fill="var(--thor-accent)" stroke="#fff" stroke-width="1.5"/>`;
+    s += `<line x1="${L}" x2="${W}" y1="${H - bot}" y2="${H - bot}" class="axis"/>`;
+    const lv = ["#2e9d5b", "#eab308", "#f97316", "#dc2626"];
+    return `<div class="panel"><div class="panel-t">${esc(t.air.title)}</div>
+      <div class="vent ${vcls}"><ha-icon icon="mdi:window-open-variant"></ha-icon><div><b>${esc(verdict)}</b>${ok(rhIfVent) ? `<div class="small muted">${esc(t.air.after.replace("{rh}", this._fmt(rhIfVent, 0)))}</div>` : ""}</div></div>
+      <div class="air2">
+        <svg viewBox="0 0 ${W} ${H}" class="comfort">${s}</svg>
+        <div class="chips">
+          ${this._chip("mdi:home-thermometer", t.indoor, `${this._fmt(this._fromC(Ti, "indoor_temp_entity"), 1)} ${this._tempUnit("indoor_temp_entity")} · ${this._fmt(RHi, 0)} %`, "indoor_humidity_entity")}
+          ${this._chip("mdi:water", t.air.ah_in, `${this._fmt(AHi, 1)} g/m³`)}
+          ${ok(AHo) ? this._chip("mdi:water-outline", t.air.ah_out, `${this._fmt(AHo, 1)} g/m³`) : ""}
+          ${this._chip("mdi:water-thermometer", t.air.dew_in, `${this._fmt(this._fromC(td, "indoor_temp_entity"), 1)} ${this._tempUnit("indoor_temp_entity")}`)}
+          ${ok(Tsi) ? this._chip("mdi:wall", t.air.wall, `${this._fmt(this._fromC(Tsi, "indoor_temp_entity"), 1)} ${this._tempUnit("indoor_temp_entity")} · ${this._fmt(rhWall, 0)} %`) : ""}
+          ${mold >= 0 ? `<div class="chip"><ha-icon icon="mdi:bacteria-outline" style="color:${lv[mold]}"></ha-icon><div><div class="chip-l">${esc(t.air.mold)}</div><div class="chip-v" style="color:${lv[mold]}">${esc(t.lvl[mold])}</div></div></div>` : ""}
+          <div class="chip"><ha-icon icon="mdi:sofa-outline" style="color:${lv[comfort * 1.5 | 0]}"></ha-icon><div><div class="chip-l">${esc(t.air.comfort)}</div><div class="chip-v">${esc(t.air.cf[comfort])}</div></div></div>
+        </div>
+      </div>
+      <div class="small muted">${esc(t.air.hint.replace("{f}", this._fmt(fr, 2)))}</div></div>`;
+  }
+
+  /* ----------------------------------------------------- Garten-Wasserbilanz */
+
+  _et0(d) {
+    // Makkink, wenn Strahlung vorhanden, sonst Hargreaves-Samani (FAO-56)
+    if (!ok(d.mean)) return NaN;
+    if (ok(d.sunKwh) && d.sunKwh > 0) {
+      const Rs = d.sunKwh * 3.6; // MJ/m²
+      const T = d.mean;
+      const es = 0.6108 * Math.exp((17.27 * T) / (T + 237.3));
+      const delta = (4098 * es) / (T + 237.3) ** 2;
+      return Math.max(0, 0.61 * (delta / (delta + 0.066)) * (Rs / 2.45) - 0.12);
+    }
+    if (!ok(d.max) || !ok(d.min)) return NaN;
+    const lat = rad(this._loc()?.lat ?? 51);
+    const J = Math.floor((d.t - new Date(new Date(d.t).getFullYear(), 0, 0)) / DAY);
+    const dr = 1 + 0.033 * Math.cos((2 * Math.PI * J) / 365), dec = 0.409 * Math.sin((2 * Math.PI * J) / 365 - 1.39);
+    const ws = Math.acos(clamp(-Math.tan(lat) * Math.tan(dec), -1, 1));
+    const Ra = ((24 * 60) / Math.PI) * 0.082 * dr * (ws * Math.sin(lat) * Math.sin(dec) + Math.cos(lat) * Math.cos(dec) * Math.sin(ws));
+    return Math.max(0, 0.0023 * (d.mean + 17.8) * Math.sqrt(Math.max(0, d.max - d.min)) * Ra * 0.408);
+  }
+
+  _waterBalance() {
+    const t = this._t;
+    const days = this._daysX();
+    if (!days) return `<div class="panel"><div class="panel-t">${esc(t.wb.title)}</div>${this._noLong()}</div>`;
+    const n = 30;
+    const today = new Date().setHours(0, 0, 0, 0);
+    const byDay = new Map(days.map((d) => [d.t, d]));
+    const list = [];
+    for (let i = n; i >= 1; i--) {
+      const k = new Date(today - i * DAY + 12 * HOUR).setHours(0, 0, 0, 0);
+      const d = byDay.get(k) || { t: k };
+      list.push({ t: k, rain: ok(d.rain) ? d.rain : NaN, et: this._et0(d) });
+    }
+    if (!list.some((x) => ok(x.et))) return `<div class="panel"><div class="panel-t">${esc(t.wb.title)}</div>${this._noLong()}</div>`;
+    const bal = (k) => list.slice(-k).reduce((a, x) => a + (ok(x.rain) ? x.rain : 0) - (ok(x.et) ? x.et : 0), 0);
+    const b7 = bal(7), b14 = bal(14), b30 = bal(30);
+    const et7 = list.slice(-7).reduce((a, x) => a + (ok(x.et) ? x.et : 0), 0);
+    // Regen laut Vorhersage (2 Tage)
+    const fcRain = (this._fc?.daily || []).slice(0, 2).reduce((a, f) => a + (ok(num(f.precipitation)) ? num(f.precipitation) : 0), 0);
+    const deficit = Math.max(0, -b7);
+    let advice, acls;
+    if (deficit < 8) { advice = t.wb.no_need; acls = "good"; }
+    else if (fcRain >= deficit * 0.7) { advice = t.wb.rain_coming.replace("{mm}", this._fmt(fcRain, 0)); acls = "ok"; }
+    else { advice = t.wb.water.replace("{l}", this._fmt(clamp(Math.round(deficit / 5) * 5, 10, 30), 0)); acls = "bad"; }
+    const cool = new Date().getMonth() <= 2 || new Date().getMonth() >= 10;
+    if (cool && deficit >= 8) { advice = t.wb.winter; acls = "ok"; }
+    // Diagramm
+    const W = 320, H = 130, mid = 72, sc = 4;
+    const bw = W / n;
+    let s = `<line x1="0" x2="${W}" y1="${mid}" y2="${mid}" class="axis"/>`;
+    let cum = 0, d = "";
+    const mxAbs = Math.max(10, ...list.map((x) => Math.max(ok(x.rain) ? x.rain : 0, ok(x.et) ? x.et : 0)));
+    const k = Math.min(sc, 50 / mxAbs);
+    list.forEach((x, i) => {
+      const xx = i * bw;
+      if (ok(x.rain) && x.rain > 0) s += `<rect x="${(xx + bw * 0.15).toFixed(1)}" y="${(mid - x.rain * k).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(x.rain * k).toFixed(1)}" fill="#3b82f6" rx="1"><title>${this._date(x.t)}: ${this._fmt(x.rain, 1)} mm</title></rect>`;
+      if (ok(x.et) && x.et > 0) s += `<rect x="${(xx + bw * 0.15).toFixed(1)}" y="${mid}" width="${(bw * 0.7).toFixed(1)}" height="${(x.et * k).toFixed(1)}" fill="#f97316" opacity=".75" rx="1"><title>${this._date(x.t)}: ET₀ ${this._fmt(x.et, 1)} mm</title></rect>`;
+      cum += (ok(x.rain) ? x.rain : 0) - (ok(x.et) ? x.et : 0);
+      d += `${i ? "L" : "M"}${(xx + bw / 2).toFixed(1)},${clamp(mid - cum * (k / 2), 4, H - 14).toFixed(1)} `;
+      if (i % 7 === 2) s += `<text x="${(xx + bw / 2).toFixed(1)}" y="${H - 2}" class="bl muted">${new Date(x.t).getDate()}.</text>`;
+    });
+    s += `<path d="${d}" fill="none" stroke="#2e7d32" stroke-width="1.8"/>`;
+    return `<div class="panel"><div class="panel-t row"><span>${esc(t.wb.title)}</span><span class="small muted">ET₀ ${days.some((x) => ok(x.sunKwh)) ? "Makkink" : "Hargreaves"}</span></div>
+      <div class="vent ${acls}"><ha-icon icon="mdi:watering-can-outline"></ha-icon><div><b>${esc(advice)}</b><div class="small muted">${esc(t.wb.basis.replace("{b}", `${b7 > 0 ? "+" : ""}${this._fmt(b7, 1)}`).replace("{et}", this._fmt(et7, 1)))}</div></div></div>
+      <div class="chips ex">
+        ${this._chip("mdi:calendar-week", `${t.wb.bal} 7 ${t.veg.d}`, `${b7 > 0 ? "+" : ""}${this._fmt(b7, 1)} mm`)}
+        ${this._chip("mdi:calendar-range", `${t.wb.bal} 14 ${t.veg.d}`, `${b14 > 0 ? "+" : ""}${this._fmt(b14, 1)} mm`)}
+        ${this._chip("mdi:calendar-month", `${t.wb.bal} 30 ${t.veg.d}`, `${b30 > 0 ? "+" : ""}${this._fmt(b30, 1)} mm`)}
+        ${fcRain > 0 ? this._chip("mdi:weather-rainy", t.wb.fc, `${this._fmt(fcRain, 1)} mm`, "weather_entity") : ""}
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg>
+      <div class="legend center small"><span><i style="background:#3b82f6"></i>${esc(t.rain)}</span><span><i style="background:#f97316"></i>${esc(t.wb.et)}</span><span><i style="background:#2e7d32"></i>${esc(t.wb.cum)}</span></div></div>`;
+  }
+
+  /* ------------------------------------------------------------- Nachtfrost */
+
+  _nightFrostCalc() {
+    const now = new Date();
+    const T = this._toC(this._val("outdoor_temp_entity"));
+    const td = this._dewC();
+    if (!ok(T)) return null;
+    const kmh = this._kmh("wind_speed_entity");
+    // Bewölkung: Vorhersage der Nacht, sonst Klarheit des Nachmittags
+    let clear = NaN;
+    const hourly = this._fc?.hourly || [];
+    const night = hourly.filter((f) => { const h = new Date(Date.parse(f.datetime)).getHours(); const dt = Date.parse(f.datetime) - Date.now(); return dt > 0 && dt < 18 * HOUR && (h >= 21 || h <= 7); });
+    if (night.length) clear = night.filter((f) => ["clear-night", "sunny", "partlycloudy"].includes(f.condition)).length / night.length;
+    else if (this._radKey()) {
+      const loc = this._loc();
+      const pts = this._radSeries().filter((p) => p.t > Date.now() - 4 * HOUR);
+      if (loc && pts.length) {
+        const r = pts.map((p) => { const cs = clearSky(solarPos(p.t, loc.lat, loc.lon).el); return cs > 80 ? p.v / cs : NaN; }).filter(ok);
+        if (r.length) clear = clamp(r.reduce((a, b) => a + b, 0) / r.length, 0, 1);
+      }
+    }
+    // Abkühlung: klar & windstill stark, bewölkt/windig schwach
+    const calm = !ok(kmh) || kmh < 8;
+    const cl = ok(clear) ? clear : 0.5;
+    const drop = (calm ? 1 : ok(kmh) && kmh > 20 ? 0.35 : 0.65) * (0.35 + 0.65 * cl);
+    // Basis Taupunkt-Methode: Tmin ≈ Td − k (klar) … Td + 1 (bedeckt), nie über aktueller Temperatur
+    let est = ok(td) ? td - 2.5 * drop + 1 * (1 - drop) : T - 6 * drop;
+    const fcMin = night.length ? Math.min(...night.map((f) => num(f.temperature)).filter(ok)) : NaN;
+    const fcMinC = ok(fcMin) && /F/.test(this._hass?.states?.[this._config.weather_entity]?.attributes?.temperature_unit || "") ? (fcMin - 32) / 1.8 : fcMin;
+    if (ok(fcMinC)) est = (est + fcMinC) / 2;
+    est = Math.min(est, T);
+    const ground = est - (1 + 2.5 * drop);
+    // letzte Nacht gemessen (18–9 Uhr)
+    const n0 = new Date(now); n0.setHours(18, 0, 0, 0); if (now.getHours() < 18) n0.setDate(n0.getDate() - 1);
+    const lastNight = minMax(this._series("outdoor_temp_entity"), n0.getTime(), Math.min(Date.now(), n0.getTime() + 15 * HOUR), null).min;
+    return { est, ground, clear, calm, fcMin: fcMinC, lastNight, td };
+  }
+
+  _nightFrost() {
+    const t = this._t;
+    const r = this._nightFrostCalc();
+    if (!r) return "";
+    const lvl = r.est <= -5 ? 3 : r.est <= 0 ? 2 : r.ground <= 0 ? 1 : 0;
+    const lv = ["#2e9d5b", "#eab308", "#f97316", "#dc2626"];
+    const warn = [];
+    if (r.ground <= 0 && ok(r.td) && r.td <= 0.5) warn.push(["mdi:car-defrost-front", t.nf.car]);
+    if (r.ground <= 2) warn.push(["mdi:flower-outline", t.nf.plants]);
+    if (r.est <= -5) warn.push(["mdi:pipe-leak", t.nf.pipes]);
+    if (r.est <= 1 && this._rainToday() > 0) warn.push(["mdi:road-variant", t.nf.ice]);
+    const u = this._tempUnit();
+    return `<div class="panel"><div class="panel-t row"><span>${esc(t.nf.title)}</span><span class="small muted">${esc(t.nf.method)}</span></div>
+      <div class="vent" style="border-left-color:${lv[lvl]}"><ha-icon icon="${lvl ? "mdi:snowflake-alert" : "mdi:weather-night"}" style="color:${lv[lvl]}"></ha-icon><div>
+        <b>${esc(t.nf.lvl[lvl])}</b>
+        <div class="small muted">${esc(t.nf.est)}: <b>${this._fmt(this._fromC(r.est), 1)} ${esc(u)}</b> · ${esc(t.nf.ground)}: <b>${this._fmt(this._fromC(r.ground), 1)} ${esc(u)}</b></div></div></div>
+      <div class="chips ex">
+        ${this._chip("mdi:weather-night", t.nf.sky, ok(r.clear) ? `${Math.round(r.clear * 100)} % ${t.nf.clear}` : "–")}
+        ${this._chip("mdi:weather-windy", t.wind, r.calm ? t.nf.calm : t.nf.windy, "wind_speed_entity")}
+        ${ok(r.fcMin) ? this._chip("mdi:crystal-ball", t.nf.model, `${this._fmt(this._fromC(r.fcMin), 1)} ${u}`, "weather_entity") : ""}
+        ${r.lastNight ? this._chip("mdi:history", t.nf.last, `${this._fmt(r.lastNight.v, 1)} ${u} · ${this._time(r.lastNight.t)}`, "outdoor_temp_entity") : ""}
+      </div>
+      ${warn.length ? `<div class="pnotes" style="margin-top:6px">${warn.map(([i, x]) => `<div class="pnote up"><ha-icon icon="${i}"></ha-icon><span>${esc(x)}</span></div>`).join("")}</div>` : ""}
+    </div>`;
+  }
+
+  /* ---------------------------------------------------------------- Biowetter */
+
+  _bio() {
+    const t = this._t;
+    const now = Date.now();
+    const pp = this._series("pressure_entity");
+    const p = this._val("pressure_entity");
+    const p24 = valueAt(pp, now - DAY);
+    const dp24 = ok(p) && ok(p24) ? p - p24 : NaN;
+    const pr = this._pressureTrend();
+    const T = this._toC(this._val("outdoor_temp_entity"));
+    const rh = this._val("humidity_entity");
+    const kmh = this._kmh("wind_speed_entity");
+    const td = this._dewC();
+    const feels = this._config.feels_like_entity ? this._toC(this._val("feels_like_entity"), "feels_like_entity") : feelsLikeC(T, rh, kmh);
+    const days = this._days() || [];
+    const today = new Date().setHours(0, 0, 0, 0);
+    const yd = days.find((d) => d.t === new Date(today - 12 * HOUR).setHours(0, 0, 0, 0));
+    const tdNow = days.find((d) => d.t === today);
+    const dTmax = yd && tdNow && ok(yd.max) && ok(tdNow.max) ? tdNow.max - yd.max : NaN;
+    const L = (v, a, b, c) => (!ok(v) ? 0 : v >= c ? 3 : v >= b ? 2 : v >= a ? 1 : 0);
+    const f = [];
+    const pLvl = L(Math.abs(dp24), 4, 8, 12), p3 = L(Math.abs(pr.d), 2, 3.5, 6);
+    if (pLvl || p3) f.push(t.bio.f_press.replace("{d}", `${dp24 > 0 ? "+" : ""}${this._fmt(dp24, 1)}`));
+    const tLvl = L(Math.abs(dTmax), 4, 6, 9);
+    if (tLvl) f.push(t.bio.f_temp.replace("{d}", `${dTmax > 0 ? "+" : ""}${this._fmt(dTmax, 1)}`));
+    const heat = L(feels, 26, 32, 38), sultry = L(td, 16, 18, 21), cold = L(-feels, 0, 5, 12);
+    if (heat) f.push(t.bio.f_heat);
+    if (sultry) f.push(t.bio.f_sultry);
+    if (cold) f.push(t.bio.f_cold);
+    const damp = ok(T) && T < 10 && ok(rh) && rh >= 85 ? (rh >= 95 ? 2 : 1) : 0;
+    if (damp) f.push(t.bio.f_damp);
+    const pollen = (() => { const pd = this._pollenData(); const b = pd.some((d) => d.mine) ? pd.filter((d) => d.mine) : pd; const m = Math.max(...b.map((d) => d.today).filter(ok), 0); return m >= 2.5 ? 2 : m >= 1.5 ? 1 : 0; })();
+    const cats = [
+      ["mdi:heart-pulse", t.bio.c_circ, Math.max(heat, sultry, tLvl, Math.min(2, pLvl))],
+      ["mdi:head-flash-outline", t.bio.c_head, Math.max(pLvl, p3, Math.min(2, tLvl))],
+      ["mdi:lungs", t.bio.c_resp, Math.max(cold, pollen)],
+      ["mdi:human-handsdown", t.bio.c_joint, Math.max(damp, cold > 0 && pr.d < -1 ? 2 : 0, p3 && T < 10 ? 1 : 0)],
+    ];
+    const lv = ["#2e9d5b", "#eab308", "#f97316", "#dc2626"];
+    const overall = Math.max(...cats.map((x) => x[2]));
+    return `<div class="panel"><div class="panel-t row"><span>${esc(t.bio.title)}</span><span class="small" style="color:${lv[overall]}"><b>${esc(t.bio.lvl[overall])}</b></span></div>
+      <div class="bios">${cats.map(([i, l, v]) => `<div class="bio"><ha-icon icon="${i}" style="color:${lv[v]}"></ha-icon><div class="small">${esc(l)}</div><div class="bbar"><span style="width:${(v / 3) * 100}%;background:${lv[v]}"></span></div><div class="small" style="color:${lv[v]}">${esc(t.bio.short[v])}</div></div>`).join("")}</div>
+      ${f.length ? `<div class="pnotes" style="margin-top:6px">${f.map((x) => `<div class="pnote"><ha-icon icon="mdi:information-outline"></ha-icon><span>${esc(x)}</span></div>`).join("")}</div>` : `<div class="small muted" style="margin-top:6px">${esc(t.bio.calm)}</div>`}
+      <div class="small muted" style="margin-top:6px">${esc(t.bio.note)}</div></div>`;
+  }
+
+  /* ---------------------------------------------------------- Regen-Analyse */
+
+  _rainAnalysis() {
+    const t = this._t;
+    const c = this._config;
+    const days = this._daysX();
+    const hourly = this._rainHourly || [];
+    if (!days && !hourly.length) return "";
+    const thr = c.rain_day_threshold;
+    const y = new Date().getFullYear();
+    // Trocken-/Regenperioden aus Tageswerten
+    const spells = (yy) => {
+      let dry = 0, wet = 0, bestDry = { n: 0 }, bestWet = { n: 0 }, curDry = 0;
+      for (const d of (days || []).filter((x) => new Date(x.t).getFullYear() === yy && ok(x.rain))) {
+        if (d.rain < thr) { dry++; wet = 0; if (dry > bestDry.n) bestDry = { n: dry, end: d.t }; }
+        else { wet++; dry = 0; if (wet > bestWet.n) bestWet = { n: wet, end: d.t }; }
+        curDry = dry;
+      }
+      return { bestDry, bestWet, curDry };
+    };
+    const sp = spells(y);
+    // Ereignisse aus Stundensummen: Regen getrennt durch ≥ 6 trockene Stunden
+    const ev = [];
+    let cur = null;
+    for (const h of hourly) {
+      if (h.v >= 0.1) {
+        if (cur && h.start - cur.end <= 6 * HOUR) { cur.end = h.start + HOUR; cur.sum += h.v; cur.max = Math.max(cur.max, h.v); cur.hours.push(h); }
+        else { cur = { start: h.start, end: h.start + HOUR, sum: h.v, max: h.v, hours: [h] }; ev.push(cur); }
+      }
+    }
+    for (const e of ev) {
+      let m6 = 0;
+      for (const h of e.hours) m6 = Math.max(m6, e.hours.filter((x) => x.start >= h.start && x.start < h.start + 6 * HOUR).reduce((a, x) => a + x.v, 0));
+      e.max6 = m6;
+      e.cls = e.max >= 40 || m6 >= 60 ? 3 : e.max >= 25 || m6 >= 35 ? 2 : e.max >= 15 || m6 >= 20 ? 1 : 0;
+    }
+    const yearEv = ev.filter((e) => new Date(e.start).getFullYear() === y);
+    const heavy = yearEv.filter((e) => e.cls >= 1);
+    const maxH = hourly.filter((h) => new Date(h.start).getFullYear() === y).reduce((b, h) => (!b || h.v > b.v ? h : b), null);
+    const max6 = yearEv.reduce((b, e) => (!b || e.max6 > b.max6 ? e : b), null);
+    const recent = ev.filter((e) => e.sum >= 0.5).slice(-8).reverse();
+    const cls = t.ra.cls;
+    const ccol = ["#93c5fd", "#f59e0b", "#f97316", "#dc2626"];
+    const rows = recent.map((e) => `<div class="evrow"><span class="evd">${this._date(e.start)} ${this._time(e.start)}</span><span>${Math.round((e.end - e.start) / HOUR)} h</span><b>${this._fmt(e.sum, 1)} mm</b><span class="muted">max ${this._fmt(e.max, 1)} mm/h</span>${e.cls ? `<span class="evc" style="background:${ccol[e.cls]}">${esc(cls[e.cls])}</span>` : "<span></span>"}</div>`).join("");
+    return `<div class="panel"><div class="panel-t row"><span>${esc(t.ra.title)} ${y}</span><span class="small muted">${esc(t.ra.dwd)}</span></div>
+      <div class="chips ex">
+        ${this._chip("mdi:weather-sunny-off", t.ra.dry_now, `${sp.curDry} ${t.veg.d}`)}
+        ${sp.bestDry.n ? this._chip("mdi:weather-sunny", t.ra.dry_max, `${sp.bestDry.n} ${t.veg.d} · ${t.ra.until} ${this._date(sp.bestDry.end)}`) : ""}
+        ${sp.bestWet.n ? this._chip("mdi:weather-rainy", t.ra.wet_max, `${sp.bestWet.n} ${t.veg.d} · ${t.ra.until} ${this._date(sp.bestWet.end)}`) : ""}
+        ${hourly.length ? this._chip("mdi:weather-pouring", t.ra.heavy, `${heavy.length} · ${yearEv.length} ${t.ra.events}`) : ""}
+        ${maxH && maxH.v > 0 ? this._chip("mdi:speedometer", t.ra.max1, `${this._fmt(maxH.v, 1)} mm · ${this._date(maxH.start)}`) : ""}
+        ${max6 && max6.max6 > 0 ? this._chip("mdi:timer-sand", t.ra.max6, `${this._fmt(max6.max6, 1)} mm · ${this._date(max6.start)}`) : ""}
+      </div>
+      ${rows ? `<div class="panel-t small" style="margin-top:8px">${esc(t.ra.recent)}</div><div class="evlist">${rows}</div>` : hourly.length ? "" : `<div class="small muted">${esc(t.ra.need)}</div>`}
+    </div>`;
   }
 
   /* --------------------------------------------------------------- Sonne */
@@ -2861,8 +3640,9 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .big { font-size: 1.35em; font-weight: 600; }
 .u { font-size: .55em; font-weight: 400; margin-left: 3px; color: var(--secondary-text-color); }
 .empty { padding: 18px; text-align:center; color: var(--secondary-text-color); }
-.tabs { display:flex; gap:4px; margin: 2px 0 10px; border-bottom: 1px solid var(--divider-color); }
-.tab { flex:1; background:none; border:none; padding:8px 4px; cursor:pointer; color: var(--secondary-text-color); font: inherit; font-weight:500; border-bottom: 2px solid transparent; }
+.tabs { display:flex; gap:2px; margin: 2px 0 10px; border-bottom: 1px solid var(--divider-color); overflow-x:auto; scrollbar-width:none; }
+.tabs::-webkit-scrollbar { display:none; }
+.tab { flex:1 0 auto; white-space:nowrap; background:none; border:none; padding:8px 8px; cursor:pointer; color: var(--secondary-text-color); font: inherit; font-weight:500; border-bottom: 2px solid transparent; }
 .tab.on { color: var(--primary-text-color); border-bottom-color: var(--thor-accent); }
 .body { display:flex; flex-direction:column; gap:12px; }
 .stack-sec { display:flex; flex-direction:column; gap:12px; }
@@ -2883,7 +3663,8 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .chip { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:10px; background: var(--secondary-background-color, rgba(127,127,127,.08)); }
 .chip ha-icon { --mdc-icon-size: 20px; color: var(--thor-blue); }
 .chip-l { font-size:.74em; color: var(--secondary-text-color); }
-.chip-v { font-size:.92em; font-weight:500; white-space:nowrap; }
+.chip-v { font-size:.92em; font-weight:500; }
+.bl[text-anchor="start"] { text-anchor:start; } .bl[text-anchor="end"] { text-anchor:end; }
 /* Gauges */
 .gauges { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:6px; }
 .gauge svg { width:100%; height:auto; display:block; }
@@ -3017,6 +3798,37 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .hcells { display:grid; gap:1px; }
 .hm { height:12px; border-radius:2px; }
 .hlbl { display:flex; justify-content:space-between; }
+/* Auswertungen */
+.recs { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:6px; }
+.rec { display:flex; gap:8px; align-items:center; padding:6px 8px; border-radius:10px; border:1px solid var(--divider-color); }
+.rec ha-icon { --mdc-icon-size: 24px; flex:none; }
+.rv2 { font-weight:600; }
+.drec { margin-top:10px; }
+.badge-rec { margin-top:6px; padding:6px 10px; border-radius:8px; background: linear-gradient(90deg, rgba(245,166,35,.25), transparent); font-weight:600; }
+.tscroll { overflow-x:auto; }
+.rtab { width:100%; border-collapse:collapse; font-size:.82em; }
+.rtab th { font-weight:500; color: var(--secondary-text-color); text-align:right; padding:3px 4px; white-space:nowrap; }
+.rtab td { text-align:right; padding:3px 4px; border-top:1px solid var(--divider-color); white-space:nowrap; }
+.rtab td:first-child, .rtab th:first-child { text-align:left; }
+.rtab tr.cur td { font-weight:600; background: rgba(245,166,35,.08); }
+.stripes, .cal { width:100%; height:auto; display:block; }
+.vent { display:flex; gap:10px; align-items:center; padding:8px 10px; border-radius:10px; border-left:4px solid var(--divider-color); background: var(--secondary-background-color, rgba(127,127,127,.08)); margin-bottom:6px; }
+.vent ha-icon { --mdc-icon-size: 30px; flex:none; color: var(--thor-blue); }
+.vent.good { border-left-color:#2e9d5b; } .vent.good ha-icon { color:#2e9d5b; }
+.vent.ok { border-left-color:#eab308; } .vent.ok ha-icon { color:#eab308; }
+.vent.bad { border-left-color:#f97316; } .vent.bad ha-icon { color:#f97316; }
+.air2 { display:grid; grid-template-columns: minmax(160px, 1fr) 1.4fr; gap:8px; align-items:start; }
+@media (max-width: 480px) { .air2 { grid-template-columns: 1fr; } }
+.air2 .chips { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.comfort { width:100%; height:auto; }
+.bios { display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; }
+.bio { text-align:center; display:flex; flex-direction:column; align-items:center; gap:3px; border:1px solid var(--divider-color); border-radius:10px; padding:6px 4px; }
+.bio ha-icon { --mdc-icon-size: 26px; }
+.bbar { width:80%; height:6px; border-radius:3px; background: var(--thor-off); overflow:hidden; }
+.bbar span { display:block; height:100%; border-radius:3px; }
+.evlist { display:flex; flex-direction:column; gap:3px; }
+.evrow { display:grid; grid-template-columns: 1.4fr .5fr .8fr 1.2fr auto; gap:6px; align-items:center; font-size:.82em; padding:3px 0; border-bottom:1px solid var(--divider-color); }
+.evc { padding:1px 6px; border-radius:6px; color:#fff; font-size:.85em; white-space:nowrap; }
 /* Sonne */
 .sunarc { width:100%; height:auto; display:block; }
 .sunglow { filter: drop-shadow(0 0 5px rgba(251,191,36,.9)); }
@@ -3058,6 +3870,9 @@ const ED = {
       show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", windrose_metric: "Windrose: Darstellung", show_rose_metric_switch: "Windrose: Umschalter Häufigkeit/Geschw./Stärke", show_rose_now: "Windrose: aktueller Wind",
       weather_entity: "Wetter-Entität (Vorhersage)", forecast_model: "Prognosemodell", hemisphere: "Halbkugel", forecast_hours: "Stunden in der Vorhersage", forecast_days: "Tage in der Vorhersage",
       show_zambretti: "Lokale Prognose (Zambretti)", show_pressure_chart: "Luftdruck-Trend", show_risks: "Hinweise (Nebel, Frost, Sturm …)", show_weather_forecast: "Vorhersage der Wetter-Entität",
+      show_records: "Rekorde & Extreme", show_stripes: "Klimastreifen & Jahresvergleich", show_calendar: "Kalender-Heatmap", show_vegetation: "Vegetation & Garten", show_degree_days: "Heiz- & Kühlgradtage",
+      show_indoor_climate: "Lüften & Schimmelrisiko", show_water_balance: "Garten-Wasserbilanz", show_night_frost: "Nachtfrost-Prognose", show_bio: "Biowetter", show_rain_analysis: "Regen-Analyse",
+      climate_years: "Jahre für Klima-Auswertungen", heating_indoor: "Innentemperatur (Gradtage)", heating_limit: "Heizgrenze", cooling_base: "Kühlgrenze", mold_frsi: "Temperaturfaktor Wand (fRsi)",
       pollen_entities: "Pollen-Sensoren", pollen_allergies: "Deine Allergene (hervorheben)", pollen_scale: "Skala der Sensoren", pollen_area: "Wohnlage (Lüftungstipp)",
       pollen_history_days: "Pollen-Verlauf", pollen_auto: "DWD-Pollenflug automatisch finden", pollen_show_empty: "Pollen ohne Flug zeigen", show_pollen: "Pollenflug", show_pollen_history: "Pollen-Verlauf (Heatmap)",
       accent_color: "Akzent", wind_color: "Wind", gust_color: "Böen", needle_color: "Zeiger", show_gust_chart: "Wind & Böen – Verlauf", windrose_mode: "Windrose zeigt",
@@ -3086,6 +3901,9 @@ const ED = {
       pressure_offset: "Wird zum Messwert addiert (z. B. für Höhenkorrektur).",
       image_rotation: "Positiv = im Uhrzeigersinn. Tipp: In Google Maps ist Norden oben – so soll dein Haus liegen.",
       tabs: "Bei „Untereinander“ werden diese Abschnitte nacheinander gezeigt.",
+      climate_years: "So weit zurück wird die Langzeitstatistik gelesen (Rekorde, Klimastreifen, Kalender).",
+      mold_frsi: "0,7 = Mindestwert nach DIN 4108-2; Altbau eher 0,6, gut gedämmt 0,8–0,9.",
+      heating_limit: "Tage mit Tagesmittel darunter zählen als Heiztage (G20/15 nach VDI 3807).",
       pollen_entities: "Leer = alle Sensoren der Integration „DWD Pollenflug“ (sensor.pollenflug_…) automatisch.",
       pollen_allergies: "Diese Pollen stehen oben, sind fett und bestimmen die Gesamtbelastung und die Hinweise.",
       forecast_model: "Zambretti: klassisches Barometer-Modell aus Luftdruck, 3-h-Tendenz, Windrichtung und Jahreszeit – am besten für die nächsten 12 h.",
@@ -3095,8 +3913,9 @@ const ED = {
       sunshine_threshold: "WMO: Sonnenschein ab 120 W/m².",
       skin_type: "Für die Sonnenbrandzeit (Fitzpatrick I–VI).",
     },
-    sections: { pollen: "Pollenflug", forecast: "Prognose", colors: "Farben", windavg: "Wind-Mittelwerte der Station (optional)", temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
+    sections: { analysis: "Auswertungen", pollen: "Pollenflug", forecast: "Prognose", colors: "Farben", windavg: "Wind-Mittelwerte der Station (optional)", temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
     opts: {
+      climate: "Klima", home: "Haus & Garten",
       tabs: "Reiter", stack: "Untereinander", now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr",
       p_ppm: "Pollen/m³", p_city: "Stadt", p_rural: "Land", pollen: "Pollen",
       wind_m: "Mittelwind", gust_m: "Böen", m_freq: "Häufigkeit", m_speed: "Geschwindigkeit", m_bft: "Stärke (Beaufort)", forecast: "Prognose",
@@ -3122,6 +3941,9 @@ const ED = {
       show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", windrose_metric: "Wind rose: display", show_rose_metric_switch: "Wind rose: frequency/speed/force switch", show_rose_now: "Wind rose: current wind",
       weather_entity: "Weather entity (forecast)", forecast_model: "Forecast model", hemisphere: "Hemisphere", forecast_hours: "Hours in forecast", forecast_days: "Days in forecast",
       show_zambretti: "Local forecast (Zambretti)", show_pressure_chart: "Pressure trend", show_risks: "Alerts (fog, frost, storm …)", show_weather_forecast: "Weather entity forecast",
+      show_records: "Records & extremes", show_stripes: "Climate stripes & year comparison", show_calendar: "Calendar heatmap", show_vegetation: "Vegetation & garden", show_degree_days: "Heating & cooling degree days",
+      show_indoor_climate: "Ventilation & mould risk", show_water_balance: "Garden water balance", show_night_frost: "Night frost forecast", show_bio: "Biometeorology", show_rain_analysis: "Rain analysis",
+      climate_years: "Years for climate analyses", heating_indoor: "Indoor temperature (degree days)", heating_limit: "Heating limit", cooling_base: "Cooling base", mold_frsi: "Wall temperature factor (fRsi)",
       pollen_entities: "Pollen sensors", pollen_allergies: "Your allergens (highlight)", pollen_scale: "Sensor scale", pollen_area: "Area (airing tip)",
       pollen_history_days: "Pollen history", pollen_auto: "Find DWD Pollenflug automatically", pollen_show_empty: "Show pollen without flight", show_pollen: "Pollen", show_pollen_history: "Pollen history (heatmap)",
       accent_color: "Accent", wind_color: "Wind", gust_color: "Gusts", needle_color: "Needle", show_gust_chart: "Wind & gusts – history", windrose_mode: "Wind rose shows",
@@ -3150,6 +3972,9 @@ const ED = {
       pressure_offset: "Added to the reading (e.g. altitude correction).",
       image_rotation: "Positive = clockwise. Tip: in Google Maps north is up – that is how your house should be aligned.",
       tabs: "With \"stacked\" these sections are shown one after another.",
+      climate_years: "How far back long-term statistics are read (records, stripes, calendar).",
+      mold_frsi: "0.7 = minimum per DIN 4108-2; old buildings ~0.6, well insulated 0.8–0.9.",
+      heating_limit: "Days with a daily mean below count as heating days (G20/15, VDI 3807).",
       pollen_entities: "Empty = all sensors of the \"DWD Pollenflug\" integration (sensor.pollenflug_…) automatically.",
       pollen_allergies: "These are listed first, in bold, and drive the overall level and alerts.",
       forecast_model: "Zambretti: classic barometer model from pressure, 3 h trend, wind direction and season – best for the next 12 h.",
@@ -3159,8 +3984,9 @@ const ED = {
       sunshine_threshold: "WMO: sunshine from 120 W/m².",
       skin_type: "For the sunburn time (Fitzpatrick I–VI).",
     },
-    sections: { pollen: "Pollen", forecast: "Forecast", colors: "Colors", windavg: "Station wind means (optional)", temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
+    sections: { analysis: "Analyses", pollen: "Pollen", forecast: "Forecast", colors: "Colors", windavg: "Station wind means (optional)", temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
     opts: {
+      climate: "Climate", home: "Home & garden",
       tabs: "Tabs", stack: "Stacked", now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year",
       p_ppm: "Grains/m³", p_city: "Town", p_rural: "Countryside", pollen: "Pollen",
       wind_m: "Mean wind", gust_m: "Gusts", m_freq: "Frequency", m_speed: "Speed", m_bft: "Force (Beaufort)", forecast: "Forecast",
@@ -3246,6 +4072,22 @@ class ThorWeatherCardEditor extends HTMLElement {
         grid([
           { name: "show_zambretti", selector: bool }, { name: "show_pressure_chart", selector: bool },
           { name: "show_risks", selector: bool }, { name: "show_weather_forecast", selector: bool },
+        ]),
+      ]),
+      sec("analysis", "mdi:chart-box-outline", [
+        grid([
+          { name: "show_records", selector: bool }, { name: "show_stripes", selector: bool },
+          { name: "show_calendar", selector: bool }, { name: "show_vegetation", selector: bool },
+          { name: "show_degree_days", selector: bool }, { name: "show_indoor_climate", selector: bool },
+          { name: "show_water_balance", selector: bool }, { name: "show_night_frost", selector: bool },
+          { name: "show_bio", selector: bool }, { name: "show_rain_analysis", selector: bool },
+        ]),
+        grid([
+          { name: "climate_years", selector: n(2, 30, 1, this._l() === ED.de ? "Jahre" : "years") },
+          { name: "heating_indoor", selector: n(15, 24, 0.5, "°C") },
+          { name: "heating_limit", selector: n(10, 18, 0.5, "°C") },
+          { name: "cooling_base", selector: n(15, 26, 0.5, "°C") },
+          { name: "mold_frsi", selector: n(0.5, 0.95, 0.01, null) },
         ]),
       ]),
       sec("pollen", "mdi:flower-pollen", [

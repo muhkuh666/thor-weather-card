@@ -27,6 +27,22 @@
 - **Hinweise**: Nebel, Frost / Glätte, Tau, Sturm (Böen oder schneller Druckfall), Gewitterneigung, Hitze und UV – jeweils mit Stufe und den Werten dahinter
 - Optional die **Vorhersage einer Wetter-Entität** (z. B. DWD, Met.no): stündlich und täglich mit Temperatur, Niederschlag, Wahrscheinlichkeit und Wind
 
+**Klima** *(aus deiner Langzeitstatistik, bis zu 30 Jahre zurück)*
+- **Rekorde & Extreme**: höchste/tiefste Temperatur, wärmster/kältester Tag, nassester Tag und Monat, stärkste Böe, höchster/tiefster Luftdruck, sonnigster Tag – dazu **dieser Kalendertag in früheren Jahren** mit 🏆, wenn heute ein neuer Rekord fällt, und eine Tabelle der **Monatsrekorde**
+- **Klimastreifen** deiner eigenen Station (jeder Monat gegen sein Mittel) und **Jahresvergleich** – bis heute (fair) oder ganze Jahre: Mittel, Extreme, Regen, Sonne, Sommer-/Frost-/Regentage
+- **Kalender-Heatmap**: das ganze Jahr Tag für Tag für Temperatur, Regen, Sonne oder Böen, Jahre wählbar
+
+**Haus & Garten**
+- **Vegetation**: Grünlandtemperatursumme und Vegetationsbeginn (DWD, 200 °C) gegen Vorjahr, letzter Frost im Frühjahr und erster im Herbst, frostfreie Zeit, Wachstumsgradtage
+- **Heiz- & Kühlgradtage** (G20/15, VDI 3807) je Monat der Heizperiode gegen die Vorsaison – „das Wetter hat 4 % weniger Heizbedarf verursacht“
+- **Lüften & Schimmelrisiko**: absolute Feuchte innen gegen außen („jetzt lüften lohnt sich“), Taupunkt innen, geschätzte kälteste Wandstelle (fRsi) mit Schimmelrisiko, Behaglichkeitsdiagramm mit Spur der letzten 24 h
+- **Garten-Wasserbilanz**: Regen minus Verdunstung (ET₀ nach Makkink aus dem Strahlungssensor, sonst Hargreaves) über 7/14/30 Tage mit Gießempfehlung, die angesagten Regen berücksichtigt
+
+**Mehr in Prognose & Regen**
+- **Nachtfrost-Prognose** (Taupunkt-Methode, Himmel und Wind, kombiniert mit der Vorhersage der Wetter-Entität): Tiefstwert in 2 m und in Bodennähe, Hinweise zu Auto, Pflanzen, Leitungen, Glätte
+- **Biowetter**: Kreislauf, Kopfschmerz, Atemwege, Gelenke aus Druck- und Temperatursprüngen, Wärme, Schwüle, Kältereiz, nasskalter Luft und Pollen
+- **Regen-Analyse**: Starkregen nach DWD-Schwellen (1 h / 6 h), letzte Regenereignisse mit Dauer und Intensität, längste Trocken- und Regenperioden
+
 **Pollen**
 - Funktioniert direkt mit **[DWD Pollenflug](https://github.com/mampfes/hacs_dwd_pollenflug)** (Sensoren werden automatisch gefunden); andere Quellen (Google Pollen UPI 0–5, Pollen/m³, Text-Stufen) werden auf dieselbe Skala 0–3 umgerechnet
 - Heute, morgen und übermorgen je Pollenart, Gesamtbelastung und Trend; **deine Allergene** werden hervorgehoben und bestimmen Gesamtbelastung, Übersicht und Hinweise
@@ -67,16 +83,25 @@
 - Die letzte Auswahl wird je Diagramm gemerkt
 
 **Allgemein**
-- Reiter (*Jetzt · Prognose · Sonne · Pollen · Wind · Regen · Jahr*) – der Pollen-Reiter erscheint nur, wenn es Pollen-Sensoren gibt
+- Reiter (*Jetzt · Prognose · Sonne · Pollen · Wind · Regen · Jahr · Klima · Haus & Garten*), scrollbar – der Pollen-Reiter erscheint nur, wenn es Pollen-Sensoren gibt
 - **Jede Option** ist im grafischen Editor einstellbar, inkl. Farben (Akzent, Wind, Böen, Zeiger) oder alles untereinander, jeder Bereich abschaltbar
 - Komplett im **grafischen Karten-Editor** einstellbar, Deutsch und Englisch, helles & dunkles Theme
 - Klick auf einen Wert öffnet den *Mehr-Infos*-Dialog von Home Assistant
 
 ## Screenshots
 
-| Jetzt | Prognose | Sonne | Pollen | Wind | Regen | Jahr |
-|---|---|---|---|---|---|---|
-| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/forecast.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/pollen.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
+| Jetzt | Prognose | Sonne | Pollen | Wind | Regen | Jahr | Klima | Haus |
+|---|---|---|---|---|---|---|---|---|
+| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/forecast.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/pollen.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/climate.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/home.png" width="180"> |
+
+## Benachrichtigungen (Blueprints)
+
+| Blueprint | Was er macht | Import |
+|---|---|---|
+| Frost | Warnung am Abend, wenn heute Nacht Frost wahrscheinlich ist (Taupunkt-Methode), und wenn es friert | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmuhkuh666%2Fthor-weather-card%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmuhkuh666%2Fthor_frost.yaml) |
+| Sturm | Böen über einer Grenze (Standard 62 km/h) und optional schneller Druckfall | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmuhkuh666%2Fthor-weather-card%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmuhkuh666%2Fthor_storm.yaml) |
+| Regen | Regenbeginn nach trockener Phase, Starkregen ab einer Regenrate | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmuhkuh666%2Fthor-weather-card%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmuhkuh666%2Fthor_rain.yaml) |
+| Pollen | Morgens Meldung zu deinen Allergenen, abends Vorhersage für morgen | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmuhkuh666%2Fthor-weather-card%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmuhkuh666%2Fthor_pollen.yaml) |
 
 ## Installation
 
@@ -162,7 +187,7 @@ image_opacity: 0.55
 | Option | Standard | Beschreibung |
 |---|---|---|
 | `layout` | `tabs` | `tabs` (Reiter) oder `stack` (alles untereinander) |
-| `tabs` | `[now, forecast, sun, pollen, wind, rain, year]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
+| `tabs` | `[now, forecast, sun, pollen, wind, rain, year, climate, home]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
 | `default_tab` | `now` | Start-Reiter |
 | `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Einzelne Bereiche ein-/ausblenden |
 | `minmax_mode` | `24h` | Min/Max über die letzten 24 h oder `today` (seit Mitternacht) |
@@ -171,6 +196,10 @@ image_opacity: 0.55
 | `wind_chart_periods` | `[today, 8h, 24h, 3d, 7d, 30d, 1y]` | Zeitraum-Knöpfe von Wind & Böen |
 | `rain_periods` / `sun_periods` | `[7d, 14d, 30d, 1y, summer, winter]` | Zeitraum-Knöpfe von Niederschlag / Sonnenstunden |
 | `windrose_default`, `wind_chart_default`, `rain_default`, `sun_default` | `24h`, `24h`, `14d`, `14d` | Start-Zeitraum (die letzte Auswahl merkt sich der Browser) |
+| `climate_years` | `10` | Jahre Langzeitstatistik für Rekorde, Klimastreifen, Kalender (2–30) |
+| `show_records`, `show_stripes`, `show_calendar`, `show_vegetation`, `show_degree_days`, `show_indoor_climate`, `show_water_balance`, `show_night_frost`, `show_bio`, `show_rain_analysis` | `true` | Auswertungen ein/aus |
+| `heating_indoor` / `heating_limit` / `cooling_base` | `20` / `15` / `18` | Gradtagzahl G20/15 und Kühlgradtage (°C) |
+| `mold_frsi` | `0.7` | Temperaturfaktor der Wand für das Schimmelrisiko (DIN 4108-2: 0,7) |
 | `pollen_entities` | auto | Pollen-Sensoren – leer = alle `sensor.pollenflug_*` (DWD Pollenflug) |
 | `pollen_allergies` | | Deine Allergene – hervorgehoben, bestimmen die Gesamtbelastung |
 | `pollen_scale` | `auto` | `auto`, `dwd` (0–3), `upi` (0–5), `ppm` (Pollen/m³) |

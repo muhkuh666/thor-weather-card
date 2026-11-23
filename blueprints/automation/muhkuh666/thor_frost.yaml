@@ -1,0 +1,83 @@
+blueprint:
+  name: Frost warning (Thor Weather Card)
+  description: >-
+    Evening warning when tonight's frost is likely – based on outdoor temperature and dew point
+    (dew point method, like the night frost panel of the card) – plus an optional warning when it
+    actually freezes. Frostwarnung am Abend, wenn Frost wahrscheinlich ist (Taupunkt-Methode wie in
+    der Karte), und optional, wenn es tatsächlich friert.
+    Part of https://github.com/muhkuh666/thor-weather-card
+  domain: automation
+  source_url: https://github.com/muhkuh666/thor-weather-card/blob/main/blueprints/automation/muhkuh666/thor_frost.yaml
+  input:
+    temp_entity:
+      name: Outdoor temperature / Außentemperatur
+      selector:
+        entity:
+          domain: sensor
+    dew_point_entity:
+      name: Dew point / Taupunkt (optional)
+      description: Without a dew point sensor only the temperature is used. Ohne Taupunkt-Sensor zählt nur die Temperatur.
+      default: []
+      selector:
+        entity:
+          domain: sensor
+    notify_device:
+      name: Phone / Handy (Home Assistant Companion App)
+      selector:
+        device:
+          integration: mobile_app
+    check_time:
+      name: Evening check / Prüfung am Abend
+      default: "19:00:00"
+      selector:
+        time: {}
+    margin:
+      name: "Warn below / Warnen unter (°C, expected minimum)"
+      description: 2 = also warns for ground frost. 2 = warnt auch vor Bodenfrost.
+      default: 2
+      selector:
+        number: { min: -10, max: 5, step: 0.5, unit_of_measurement: "°C" }
+    notify_freeze:
+      name: Also notify when it freezes / Auch melden, wenn es friert
+      default: true
+      selector:
+        boolean: {}
+
+mode: single
+max_exceeded: silent
+
+variables:
+  temp_entity: !input temp_entity
+  dew_point_entity: !input dew_point_entity
+  margin: !input margin
+  notify_freeze: !input notify_freeze
+
+trigger:
+  - platform: time
+    at: !input check_time
+    id: evening
+  - platform: numeric_state
+    entity_id: !input temp_entity
+    below: 0
+    for: { minutes: 15 }
+    id: freeze
+
+condition:
+  - condition: template
+    value_template: "{{ trigger.id != 'freeze' or notify_freeze }}"
+
+action:
+  - variables:
+      t: "{{ states(temp_entity) | float(99) }}"
+      td: "{{ states(dew_point_entity) | float(t) if dew_point_entity else t }}"
+      # Taupunkt-Methode: Tiefstwert ≈ Taupunkt − 1,5 K, nie über der aktuellen Temperatur
+      est: "{{ [t, td - 1.5] | min | round(1) }}"
+  - condition: template
+    value_template: "{{ trigger.id == 'freeze' or est <= margin }}"
+  - domain: mobile_app
+    type: notify
+    device_id: !input notify_device
+    title: "❄️ Thor"
+    message: >-
+      {% if trigger.id == 'freeze' %}Es friert: {{ t }} °C draußen.
+      {% else %}Heute Nacht Frost wahrscheinlich – Tiefstwert etwa {{ est }} °C, in Bodennähe kälter. Pflanzen schützen, Autoscheibe abdecken.{% endif %}
