@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.10.0";
+const CARD_VERSION = "1.11.0";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -72,6 +72,7 @@ const DEFAULTS = {
   show_moon_arc: true,
   show_rose_solstices: true,
   sky_on_compass: true,
+  show_sky_compass: true,
   twilight: "civil", // civil | nautical | astronomical
   // Prognose
   forecast_model: "zambretti", // zambretti | simple
@@ -227,6 +228,7 @@ const T = {
     risks: "Hinweise", risk: { nfrost: "Frost heute Nacht", pollen: "Pollen", fog: "Nebel", frost: "Frost / Glätte", dew: "Tau", storm: "Sturm", heat: "Hitze", uv: "UV", thunder: "Gewitterneigung", none: "Keine Auffälligkeiten" },
     lvl: ["gering", "möglich", "wahrscheinlich", "hoch"],
     wx_hourly: "Stündlich", wx_daily: "Täglich", wx_from: "Vorhersage von", wx_none: "Keine Vorhersage – Wetter-Entität im Editor wählen (z. B. DWD, Met.no).",
+    sky_title: "Himmelskompass", sky_hint: "Rand = Horizont, Mitte = Zenit",
     sm_title: "Sonne & Mond", dawn: "Morgendämmerung", dusk: "Abenddämmerung", noon_s: "Mittag", moonrise: "Mondaufgang", moonset: "Monduntergang", no_event: "heute keiner", height: "Höhenwinkel",
     tw: { civil: "bürgerlich", nautical: "nautisch", astronomical: "astronomisch" },
     sm: { sun: "Sonne", moon: "Mond", el: "Höhe", lit: "beleuchtet", below: "unter dem Horizont", phases: ["Neumond", "zunehmende Sichel", "zunehmender Halbmond", "zunehmender Dreiviertelmond", "Vollmond", "abnehmender Dreiviertelmond", "abnehmender Halbmond", "abnehmende Sichel"] },
@@ -324,6 +326,7 @@ const T = {
     risks: "Alerts", risk: { nfrost: "Frost tonight", pollen: "Pollen", fog: "Fog", frost: "Frost / ice", dew: "Dew", storm: "Storm", heat: "Heat", uv: "UV", thunder: "Thunderstorm tendency", none: "Nothing notable" },
     lvl: ["low", "possible", "likely", "high"],
     wx_hourly: "Hourly", wx_daily: "Daily", wx_from: "Forecast from", wx_none: "No forecast – pick a weather entity in the editor (e.g. Met.no).",
+    sky_title: "Sky compass", sky_hint: "rim = horizon, centre = zenith",
     sm_title: "Sun & moon", dawn: "Dawn", dusk: "Dusk", noon_s: "Noon", moonrise: "Moonrise", moonset: "Moonset", no_event: "none today", height: "Elevation",
     tw: { civil: "civil", nautical: "nautical", astronomical: "astronomical" },
     sm: { sun: "Sun", moon: "Moon", el: "elevation", lit: "lit", below: "below the horizon", phases: ["New moon", "Waxing crescent", "First quarter", "Waxing gibbous", "Full moon", "Waning gibbous", "Last quarter", "Waning crescent"] },
@@ -1248,6 +1251,34 @@ class ThorWeatherCard extends HTMLElement {
     return s;
   }
 
+  /** Eigene Himmelskarte für den Reiter Sonne: Kompass + Hausbild + Sonne & Mond */
+  _skyCompass() {
+    const t = this._t;
+    if (!this._loc() && !this._sunNow()) return "";
+    const sm = { sun: this._sunNow(), moon: this._loc() ? moonPos(Date.now(), this._loc().lat, this._loc().lon) : null };
+    const cx = 150, cy = 150, R = 118;
+    let s = this._houseImage(cx, cy, R, "thor-skyclip");
+    // Höhenringe 30° / 60°
+    for (const el of [30, 60]) {
+      const rr = R * (1 - el / 90);
+      s += `<circle cx="${cx}" cy="${cy}" r="${rr.toFixed(1)}" class="rring"/>`;
+      const [lx, ly] = pt(cx, cy, rr, 101.25);
+      s += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="rl">${el}°</text>`;
+    }
+    s += `<circle cx="${cx}" cy="${cy}" r="1.8" fill="var(--secondary-text-color)"/>`;
+    s += this._compassRing(cx, cy, R + 2, false);
+    const cfg = this._config;
+    const keep = { sun: cfg.show_rose_sun, moon: cfg.show_rose_moon };
+    cfg.show_rose_sun = true; cfg.show_rose_moon = !!sm.moon;
+    s += this._skyOverlay(sm, cx, cy, R);
+    cfg.show_rose_sun = keep.sun; cfg.show_rose_moon = keep.moon;
+    return `<div class="panel">
+      <div class="panel-t row"><span>${esc(t.sky_title)}</span><span class="small muted">${esc(t.sky_hint)}</span></div>
+      <svg viewBox="0 0 300 300" class="rose">${s}</svg>
+      ${this._sunMoonLine(sm)}
+    </div>`;
+  }
+
   /** Sonne und Mond für die Windrose */
   _sunMoon() {
     const c = this._config;
@@ -1707,6 +1738,7 @@ class ThorWeatherCard extends HTMLElement {
       if (c.show_pollen_history) parts.push(this._pollenHistory());
     } else if (tab === "sun") {
       if (c.show_sun_arc) parts.push(this._sunArc());
+      if (c.show_sky_compass) parts.push(this._skyCompass());
       if (c.show_sun_uv && c.uv_entity) parts.push(this._uvSun());
       if (c.show_radiation && this._radKey()) parts.push(this._radiation());
       if (c.show_sun_chart && this._radKey()) parts.push(this._sunChart());
@@ -4467,7 +4499,7 @@ const ED = {
       skin_type: "Hauttyp", sunshine_threshold: "Sonnenschein ab",
       title: "Titel", icon: "Symbol", show_header: "Kopfzeile", layout: "Layout", default_tab: "Start-Reiter", tabs: "Reiter / Abschnitte", language: "Sprache",
       show_hero: "Übersicht (Jetzt)", show_gauges: "Zeigerinstrumente", show_temps: "Temperatur-Kacheln", show_uv: "UV-Pyramide",
-      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", windrose_metric: "Windrose: Darstellung", show_rose_metric_switch: "Windrose: Umschalter Häufigkeit/Geschw./Stärke", show_rose_now: "Windrose: aktueller Wind", show_moon_arc: "Sonne & Mond: Mond anzeigen", show_rose_solstices: "Windrose: Sonnenbahn 21.6. / 21.12.", sky_on_compass: "Sonne & Mond auch auf dem Wind-Kompass", twilight: "Dämmerung", show_rose_sun: "Windrose: Sonne (Position & Tagesbahn)", show_rose_moon: "Windrose: Mond (Position & Bahn)",
+      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", windrose_metric: "Windrose: Darstellung", show_rose_metric_switch: "Windrose: Umschalter Häufigkeit/Geschw./Stärke", show_rose_now: "Windrose: aktueller Wind", show_moon_arc: "Sonne & Mond: Mond anzeigen", show_rose_solstices: "Sonnenbahn 21.6. / 21.12.", show_sky_compass: "Himmelskompass im Reiter Sonne", sky_on_compass: "Sonne & Mond auch auf dem Wind-Kompass", twilight: "Dämmerung", show_rose_sun: "Windrose: Sonne (Position & Tagesbahn)", show_rose_moon: "Windrose: Mond (Position & Bahn)",
       weather_entity: "Wetter-Entität (Vorhersage)", forecast_model: "Prognosemodell", hemisphere: "Halbkugel", forecast_hours: "Stunden in der Vorhersage", forecast_days: "Tage in der Vorhersage",
       show_zambretti: "Lokale Prognose (Zambretti)", show_pressure_chart: "Luftdruck-Trend", show_risks: "Hinweise (Nebel, Frost, Sturm …)", show_weather_forecast: "Vorhersage der Wetter-Entität",
       show_season: "Jahreszeit (Reiter Jahr)", show_season_chip: "Jahreszeit in der Übersicht", show_bft_scale: "Beaufort-Säulen (Wind & Böen)", season_type: "Jahreszeit zählt",
@@ -4541,7 +4573,7 @@ const ED = {
       skin_type: "Skin type", sunshine_threshold: "Sunshine from",
       title: "Title", icon: "Icon", show_header: "Header", layout: "Layout", default_tab: "Start tab", tabs: "Tabs / sections", language: "Language",
       show_hero: "Overview (now)", show_gauges: "Dial gauges", show_temps: "Temperature tiles", show_uv: "UV pyramid",
-      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", windrose_metric: "Wind rose: display", show_rose_metric_switch: "Wind rose: frequency/speed/force switch", show_rose_now: "Wind rose: current wind", show_moon_arc: "Sun & moon: show moon", show_rose_solstices: "Wind rose: sun path Jun 21 / Dec 21", sky_on_compass: "Sun & moon also on the wind compass", twilight: "Twilight", show_rose_sun: "Wind rose: sun (position & daily path)", show_rose_moon: "Wind rose: moon (position & path)",
+      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", windrose_metric: "Wind rose: display", show_rose_metric_switch: "Wind rose: frequency/speed/force switch", show_rose_now: "Wind rose: current wind", show_moon_arc: "Sun & moon: show moon", show_rose_solstices: "Sun path Jun 21 / Dec 21", show_sky_compass: "Sky compass in Sun tab", sky_on_compass: "Sun & moon also on the wind compass", twilight: "Twilight", show_rose_sun: "Wind rose: sun (position & daily path)", show_rose_moon: "Wind rose: moon (position & path)",
       weather_entity: "Weather entity (forecast)", forecast_model: "Forecast model", hemisphere: "Hemisphere", forecast_hours: "Hours in forecast", forecast_days: "Days in forecast",
       show_zambretti: "Local forecast (Zambretti)", show_pressure_chart: "Pressure trend", show_risks: "Alerts (fog, frost, storm …)", show_weather_forecast: "Weather entity forecast",
       show_season: "Season (Year tab)", show_season_chip: "Season in overview", show_bft_scale: "Beaufort columns (wind & gusts)", season_type: "Season counts",
@@ -4734,6 +4766,7 @@ class ThorWeatherCardEditor extends HTMLElement {
           { name: "show_rose_sun", selector: bool }, { name: "show_rose_moon", selector: bool },
           { name: "show_moon_arc", selector: bool },
           { name: "show_rose_solstices", selector: bool }, { name: "sky_on_compass", selector: bool },
+          { name: "show_sky_compass", selector: bool },
           { name: "show_sun_arc", selector: bool }, { name: "show_sun_uv", selector: bool },
           { name: "show_radiation", selector: bool }, { name: "show_sun_chart", selector: bool },
           { name: "show_rain", selector: bool }, { name: "show_rain_chart", selector: bool },

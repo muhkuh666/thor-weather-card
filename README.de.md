@@ -55,6 +55,7 @@
 - **Pollen-Verlauf** als Heatmap (7–90 Tage)
 
 **Sonne**
+- **Himmelskompass**: eigener Kompass nur für Sonne und Mond (mit deinem Hausbild) – Sonnenbahn mit Stundenpunkten und Auf-/Untergang, Mondbogen mit Mondauf-/-untergang, Sonnenbahnen am 21.6. / 21.12., Höhenringe 30°/60°
 - **Sonne & Mond** wie bei einer Horizont-Karte: Sonnen- und Mondbahn über den Tag mit Nacht- und Dämmerungsfläche, Auf- und Untergang, Morgen- und Abenddämmerung (bürgerlich, nautisch oder astronomisch), Sonnenhöchststand, Azimut und Höhenwinkel von Sonne ☉ und Mond ☽, Mondaufgang/-untergang, Mondphase mit Bild und Beleuchtung
 - **Sonnenbogen** des Tages mit aktuellem Sonnenstand, Auf- und Untergang, **Tageslänge inkl. Änderung zu gestern**, Sonnenhöchststand mit Höhe, aktuelle Höhe und Azimut (aus dem Standort von Home Assistant berechnet)
 - **UV**: Pyramide plus UV-Kurve des Tages in den WHO-Stufen, **UV-Tagesdosis** (SED) und **Zeit bis zum Sonnenbrand** für Hauttyp I–VI (dein Typ hervorgehoben)
@@ -226,6 +227,7 @@ image_opacity: 0.55
 | `twilight` | `civil` | Dämmerung: `civil` (bürgerlich, −6°), `nautical` (nautisch, −12°), `astronomical` (astronomisch, −18°) |
 | `show_rose_sun`, `show_rose_moon` | `true` | Sonne / Mond (Position und Bahn) auf der Windrose |
 | `show_rose_solstices` | `true` | Sonnenbahnen am 21.6. und 21.12. |
+| `show_sky_compass` | `true` | Eigener Himmelskompass im Reiter *Sonne* |
 | `sky_on_compass` | `true` | Sonne & Mond auch auf dem Wind-Kompass |
 | `show_rose_metric_switch`, `show_rose_now` | `true` | Umschalter in der Karte / aktueller Wind über der Rose |
 | `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Farben (Hex) |

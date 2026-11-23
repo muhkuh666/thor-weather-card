@@ -55,6 +55,7 @@
 - **Pollen history** as a heatmap (7–90 days)
 
 **Sun**
+- **Sky compass**: a separate compass for sun and moon (with your house image) – sun path with hour marks and sunrise/sunset, moon arc with moonrise/moonset, sun paths of 21 June / 21 December, elevation rings 30°/60°
 - **Sun & moon** like a horizon card: sun and moon path over the day with night and twilight shading, sunrise/sunset, dawn and dusk (civil, nautical or astronomical), solar noon, azimuth and elevation of sun ☉ and moon ☽, moonrise/moonset, moon phase with picture and illumination
 - **Sun arc** of the day with the current sun position, sunrise, sunset, **day length incl. change vs. yesterday**, solar noon with maximum elevation, elevation and azimuth (computed from your Home Assistant location)
 - **UV**: pyramid plus today's UV curve in the WHO bands, **daily UV dose** (SED) and **time until sunburn** for skin types I–VI (your type highlighted)
@@ -226,6 +227,7 @@ image_opacity: 0.55
 | `twilight` | `civil` | Dawn/dusk: `civil` (−6°), `nautical` (−12°), `astronomical` (−18°) |
 | `show_rose_sun`, `show_rose_moon` | `true` | Sun / moon (position and path) on the wind rose |
 | `show_rose_solstices` | `true` | Sun paths of 21 June and 21 December |
+| `show_sky_compass` | `true` | Separate sky compass in the *Sun* tab |
 | `sky_on_compass` | `true` | Sun & moon also on the wind compass |
 | `show_rose_metric_switch`, `show_rose_now` | `true` | Switch in the card / current wind above the rose |
 | `accent_color`, `wind_color`, `gust_color`, `needle_color` | | Colours (hex) |
