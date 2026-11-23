@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.1.0";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -30,13 +30,15 @@ const DEFAULTS = {
   // Sonne
   uv_entity: "",
   radiation_entity: "",
+  illuminance_entity: "",
+  sun_entity: "sun.sun",
   // Kopf & Ansicht
   title: "Thor",
   icon: "mdi:weather-lightning-rainy",
   show_header: true,
   layout: "tabs", // tabs | stack
   default_tab: "now", // now | wind | rain | year
-  tabs: ["now", "wind", "rain", "year"],
+  tabs: ["now", "sun", "wind", "rain", "year"],
   language: "auto",
   // Bereiche
   show_hero: true,
@@ -47,6 +49,12 @@ const DEFAULTS = {
   show_wind_averages: true,
   show_windrose: true,
   show_wind_values: true,
+  show_gust_chart: true,
+  windrose_mode: "wind", // wind | gust
+  show_sun_arc: true,
+  show_sun_uv: true,
+  show_radiation: true,
+  show_sun_chart: true,
   show_rain: true,
   show_rain_chart: true,
   show_climate_days: true,
@@ -57,6 +65,9 @@ const DEFAULTS = {
   windrose_periods: ["1h", "8h", "24h", "14d"],
   windrose_default: "24h",
   rain_days: 14,
+  sun_days: 14,
+  skin_type: 2,
+  sunshine_threshold: 120,
   rain_day_threshold: 0.1,
   pressure_offset: 0,
   temp_gauge_min: -25,
@@ -71,14 +82,23 @@ const DEFAULTS = {
 };
 
 const ENTITY_KEYS = Object.keys(DEFAULTS).filter((k) => k.endsWith("_entity"));
-const ALL_TABS = ["now", "wind", "rain", "year"];
+const HIST_KEYS = ENTITY_KEYS.filter((k) => k !== "sun_entity");
+const ALL_TABS = ["now", "sun", "wind", "rain", "year"];
+const LUX_TO_WM2 = 0.0079; // Näherung Sonnenlicht: 1 W/m² ≈ 127 lx
+const MED = [200, 250, 300, 450, 600, 1000]; // minimale Erythemdosis J/m² je Hauttyp I–VI
 const ROSE_PERIODS = { "1h": HOUR, "3h": 3 * HOUR, "8h": 8 * HOUR, "12h": 12 * HOUR, "24h": DAY, "3d": 3 * DAY, "7d": 7 * DAY, "14d": 14 * DAY, "30d": 30 * DAY };
 
 /* ----------------------------------------------------------------- Texte */
 
 const T = {
   de: {
-    tabs: { now: "Jetzt", wind: "Wind", rain: "Regen", year: "Jahr" },
+    tabs: { now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr" },
+    sunrise: "Aufgang", sunset: "Untergang", daylength: "Tageslänge", noon: "Sonnenhöchststand", elevation: "Höhe", azimuth: "Azimut",
+    vs_yesterday: "zu gestern", below_horizon: "Nacht", next_rise: "Nächster Aufgang",
+    uv_curve: "UV heute", uv_dose: "UV-Dosis heute", sed: "SED", burn: "Sonnenbrand nach (ungeschützt)", skin: "Hauttyp", no_burn: "kein Risiko",
+    rad_title: "Sonnenstrahlung", rad_now: "Jetzt", clear_sky: "Klarhimmel", clearness: "Klarheit", sunshine: "Sonnenschein heute", energy: "Energie heute", rad_max: "Max heute",
+    sky: ["trüb", "bewölkt", "leicht bewölkt", "sonnig"],
+    sun_days_title: "Sonnenstunden je Tag", sun_hours: "Sonnenstunden", day_curve: "Tagesverlauf",
     outdoor: "Außen", feels: "Gefühlt", indoor: "Innen", dew: "Taupunkt", humidity: "Luftfeuchte", indoor_hum: "Feuchte innen",
     pressure: "Luftdruck", temperature: "Temperatur", min: "Min", max: "Max", last24: "letzte 24 h", today: "heute",
     computed: "berechnet",
@@ -97,13 +117,15 @@ const T = {
     avg: { hour: "Stunde", day: "Tag", month: "Monat", year: "Jahr" },
     avg_title: "Windrichtung – Mittel & Hauptrichtung", mean_dir: "Mittel", main_dir: "Hauptrichtung", steadiness: "Beständigkeit",
     rose: "Windrose", rose_calm: "Windstille", rose_top: "Häufigste Richtung", nodata: "Noch keine Daten",
+    gust_chart: "Wind & Böen – 24 h", gustiness: "Böigkeit", gust_factor: "Böenfaktor", mean_wind: "Mittelwind", gust_peak: "Spitzenböe",
+    gusty: ["gleichmäßig", "leicht böig", "böig", "stark böig"], rose_by: "Windrose nach", wind_mode: "Wind", gust_mode: "Böen",
     wind_values: "Windwerte", knots: "Knoten", gusts_kn: "Böen (Knoten)", avg_speed: "Ø Geschwindigkeit", variability: "Schwankung 10 min",
     rain: "Regen", raining: "Es regnet", dry_now: "Kein Regen", rate: "Regenrate", rain_today: "Heute", rain_24h: "24 h", rain_yesterday: "Gestern",
     rain_week: "Woche", rain_month: "Monat", rain_year: "Jahr", rain_total: "Gesamt", rain_days_title: "Niederschlag je Tag",
     days_dry: "Tage ohne Regen", day_dry: "Tag ohne Regen", intensity: ["leicht", "mäßig", "stark", "sehr stark"], last_rain: "Letzter Regen",
     climate: "Klimatage", vs_last: "zum Vorjahr",
-    cd: { summer: "Sommertage", hot: "Heiße Tage", tropical: "Tropennächte", frost: "Frosttage", ice: "Eistage", rain: "Regentage" },
-    cd_help: { summer: "Tmax ≥ 25 °C", hot: "Tmax ≥ 30 °C", tropical: "Tmin ≥ 20 °C", frost: "Tmin < 0 °C", ice: "Tmax < 0 °C", rain: "Regen ≥ {t} mm" },
+    cd: { summer: "Sommertage", hot: "Heiße Tage", tropical: "Tropennächte", frost: "Frosttage", ice: "Eistage", rain: "Regentage", sun: "Sonnenstunden" },
+    cd_help: { summer: "Tmax ≥ 25 °C", hot: "Tmax ≥ 30 °C", tropical: "Tmin ≥ 20 °C", frost: "Tmin < 0 °C", ice: "Tmax < 0 °C", rain: "Regen ≥ {t} mm", sun: "seit 1. Januar" },
     tmax24: "Tmax 24 h", tmin24: "Tmin 24 h", year_max: "Jahreshöchstwert", year_min: "Jahrestiefstwert",
     climate_chart: "Klimadiagramm", this_year: "dieses Jahr", last_year: "Vorjahr", temp_mean: "Ø Temperatur", precip: "Niederschlag",
     months: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"],
@@ -112,7 +134,13 @@ const T = {
     loading: "Lade Verlauf …", ago: "vor {n}",
   },
   en: {
-    tabs: { now: "Now", wind: "Wind", rain: "Rain", year: "Year" },
+    tabs: { now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year" },
+    sunrise: "Sunrise", sunset: "Sunset", daylength: "Day length", noon: "Solar noon", elevation: "Elevation", azimuth: "Azimuth",
+    vs_yesterday: "vs. yesterday", below_horizon: "night", next_rise: "Next sunrise",
+    uv_curve: "UV today", uv_dose: "UV dose today", sed: "SED", burn: "Sunburn after (unprotected)", skin: "Skin type", no_burn: "no risk",
+    rad_title: "Solar radiation", rad_now: "Now", clear_sky: "Clear sky", clearness: "Clearness", sunshine: "Sunshine today", energy: "Energy today", rad_max: "Max today",
+    sky: ["overcast", "cloudy", "partly cloudy", "sunny"],
+    sun_days_title: "Sunshine hours per day", sun_hours: "Sunshine hours", day_curve: "Daily curve",
     outdoor: "Outdoor", feels: "Feels like", indoor: "Indoor", dew: "Dew point", humidity: "Humidity", indoor_hum: "Indoor humidity",
     pressure: "Pressure", temperature: "Temperature", min: "Min", max: "Max", last24: "last 24 h", today: "today",
     computed: "computed",
@@ -131,13 +159,15 @@ const T = {
     avg: { hour: "Hour", day: "Day", month: "Month", year: "Year" },
     avg_title: "Wind direction – mean & prevailing", mean_dir: "Mean", main_dir: "Prevailing", steadiness: "Steadiness",
     rose: "Wind rose", rose_calm: "Calm", rose_top: "Most frequent", nodata: "No data yet",
+    gust_chart: "Wind & gusts – 24 h", gustiness: "Gustiness", gust_factor: "Gust factor", mean_wind: "Mean wind", gust_peak: "Peak gust",
+    gusty: ["steady", "slightly gusty", "gusty", "very gusty"], rose_by: "Wind rose by", wind_mode: "Wind", gust_mode: "Gusts",
     wind_values: "Wind values", knots: "Knots", gusts_kn: "Gusts (knots)", avg_speed: "Ø speed", variability: "Variation 10 min",
     rain: "Rain", raining: "Raining", dry_now: "No rain", rate: "Rain rate", rain_today: "Today", rain_24h: "24 h", rain_yesterday: "Yesterday",
     rain_week: "Week", rain_month: "Month", rain_year: "Year", rain_total: "Total", rain_days_title: "Precipitation per day",
     days_dry: "days without rain", day_dry: "day without rain", intensity: ["light", "moderate", "heavy", "very heavy"], last_rain: "Last rain",
     climate: "Climate days", vs_last: "vs. last year",
-    cd: { summer: "Summer days", hot: "Hot days", tropical: "Tropical nights", frost: "Frost days", ice: "Ice days", rain: "Rain days" },
-    cd_help: { summer: "Tmax ≥ 25 °C", hot: "Tmax ≥ 30 °C", tropical: "Tmin ≥ 20 °C", frost: "Tmin < 0 °C", ice: "Tmax < 0 °C", rain: "Rain ≥ {t} mm" },
+    cd: { summer: "Summer days", hot: "Hot days", tropical: "Tropical nights", frost: "Frost days", ice: "Ice days", rain: "Rain days", sun: "Sunshine hours" },
+    cd_help: { summer: "Tmax ≥ 25 °C", hot: "Tmax ≥ 30 °C", tropical: "Tmin ≥ 20 °C", frost: "Tmin < 0 °C", ice: "Tmax < 0 °C", rain: "Rain ≥ {t} mm", sun: "since 1 January" },
     tmax24: "Tmax 24 h", tmin24: "Tmin 24 h", year_max: "Year high", year_min: "Year low",
     climate_chart: "Climate chart", this_year: "this year", last_year: "last year", temp_mean: "Ø temperature", precip: "Precipitation",
     months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -342,6 +372,57 @@ function minMax(points, start, end, live) {
   return { min: mn, max: mx };
 }
 
+/* ------------------------------------------------------ Sonnenstand (NOAA) */
+
+function solarParams(t) {
+  const jd = t / 86400000 + 2440587.5;
+  const T = (jd - 2451545) / 36525;
+  const L0 = norm360(280.46646 + T * (36000.76983 + T * 0.0003032));
+  const M = 357.52911 + T * (35999.05029 - 0.0001537 * T);
+  const e = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);
+  const C = Math.sin(rad(M)) * (1.914602 - T * (0.004817 + 0.000014 * T)) + Math.sin(rad(2 * M)) * (0.019993 - 0.000101 * T) + Math.sin(rad(3 * M)) * 0.000289;
+  const lam = L0 + C - 0.00569 - 0.00478 * Math.sin(rad(125.04 - 1934.136 * T));
+  const eps0 = 23 + (26 + (21.448 - T * (46.815 + T * (0.00059 - T * 0.001813))) / 60) / 60;
+  const eps = eps0 + 0.00256 * Math.cos(rad(125.04 - 1934.136 * T));
+  const decl = (Math.asin(Math.sin(rad(eps)) * Math.sin(rad(lam))) * 180) / Math.PI;
+  const y = Math.tan(rad(eps / 2)) ** 2;
+  const eqt = 4 * ((y * Math.sin(2 * rad(L0)) - 2 * e * Math.sin(rad(M)) + 4 * e * y * Math.sin(rad(M)) * Math.cos(2 * rad(L0)) - 0.5 * y * y * Math.sin(4 * rad(L0)) - 1.25 * e * e * Math.sin(2 * rad(M))) * 180) / Math.PI;
+  return { decl, eqt };
+}
+
+function solarPos(t, lat, lon) {
+  const { decl, eqt } = solarParams(t);
+  const d = new Date(t);
+  const utcMin = d.getUTCHours() * 60 + d.getUTCMinutes() + d.getUTCSeconds() / 60;
+  const tst = (((utcMin + eqt + 4 * lon) % 1440) + 1440) % 1440;
+  const ha = tst / 4 - 180;
+  const cz = Math.sin(rad(lat)) * Math.sin(rad(decl)) + Math.cos(rad(lat)) * Math.cos(rad(decl)) * Math.cos(rad(ha));
+  const zen = (Math.acos(clamp(cz, -1, 1)) * 180) / Math.PI;
+  let az = (Math.atan2(Math.sin(rad(ha)), Math.cos(rad(ha)) * Math.sin(rad(lat)) - Math.tan(rad(decl)) * Math.cos(rad(lat))) * 180) / Math.PI + 180;
+  return { el: 90 - zen, az: norm360(az) };
+}
+
+/** Auf-/Untergang und Mittag für den lokalen Tag von t (ms) */
+function sunTimes(t, lat, lon) {
+  const day = new Date(t);
+  day.setHours(12, 0, 0, 0);
+  const { decl, eqt } = solarParams(day.getTime());
+  const utc0 = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
+  const noonMin = 720 - 4 * lon - eqt;
+  const cosH = Math.cos(rad(90.833)) / (Math.cos(rad(lat)) * Math.cos(rad(decl))) - Math.tan(rad(lat)) * Math.tan(rad(decl));
+  const noon = utc0 + noonMin * 60000;
+  if (cosH > 1) return { noon, polar: "night" };
+  if (cosH < -1) return { noon, polar: "day" };
+  const H = (Math.acos(cosH) * 180) / Math.PI;
+  return { noon, rise: noon - H * 4 * 60000, set: noon + H * 4 * 60000 };
+}
+
+/** Klarhimmel-Globalstrahlung nach Haurwitz (W/m²) */
+function clearSky(el) {
+  const cz = Math.sin(rad(el));
+  return cz > 0.01 ? 1098 * cz * Math.exp(-0.057 / cz) : 0;
+}
+
 /* ================================================================= Karte */
 
 class ThorWeatherCard extends HTMLElement {
@@ -350,6 +431,7 @@ class ThorWeatherCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._tab = null;
     this._rose = null;
+    this._roseMode = null;
     this._hist = {};
     this._daily = null;
     this._hourly = null;
@@ -397,6 +479,7 @@ class ThorWeatherCard extends HTMLElement {
     c.windrose_periods = (Array.isArray(c.windrose_periods) && c.windrose_periods.length ? c.windrose_periods : DEFAULTS.windrose_periods).filter((p) => p in ROSE_PERIODS);
     if (!c.windrose_periods.length) c.windrose_periods = [...DEFAULTS.windrose_periods];
     c.rain_days = clamp(Math.round(num(c.rain_days) || 14), 7, 60);
+    c.sun_days = clamp(Math.round(num(c.sun_days) || 14), 7, 60);
     c.refresh_minutes = clamp(num(c.refresh_minutes) || 5, 1, 60);
     c.rain_day_threshold = Math.max(0, ok(num(c.rain_day_threshold)) ? num(c.rain_day_threshold) : 0.1);
     const old = this._config;
@@ -405,6 +488,7 @@ class ThorWeatherCard extends HTMLElement {
     if (!this._rose || !c.windrose_periods.includes(this._rose) || (old && old.windrose_default !== c.windrose_default)) {
       this._rose = c.windrose_periods.includes(c.windrose_default) ? c.windrose_default : c.windrose_periods[c.windrose_periods.length - 1];
     }
+    if (!this._roseMode || (old && old.windrose_mode !== c.windrose_mode)) this._roseMode = c.windrose_mode === "gust" ? "gust" : "wind";
     const entChanged = !old || ENTITY_KEYS.some((k) => old[k] !== c[k]);
     if (entChanged) {
       this._hist = {};
@@ -634,7 +718,7 @@ class ThorWeatherCard extends HTMLElement {
     const midnight = new Date().setHours(0, 0, 0, 0);
     const start24 = Math.min(now - DAY - HOUR, midnight);
     try {
-      const short = ENTITY_KEYS.filter((k) => !k.startsWith("wind_")).map((k) => c[k]);
+      const short = HIST_KEYS.filter((k) => !k.startsWith("wind_")).map((k) => c[k]);
       const windIds = [c.wind_speed_entity, c.wind_gust_entity, c.wind_direction_entity];
       const [h1, h2] = await Promise.all([
         this._history(short, start24, now),
@@ -642,7 +726,7 @@ class ThorWeatherCard extends HTMLElement {
       ]);
       if (token !== this._token) return;
       const hist = {};
-      for (const k of ENTITY_KEYS) {
+      for (const k of HIST_KEYS) {
         const id = c[k];
         if (!id) continue;
         const raw = (k.startsWith("wind_") ? h2 : h1)?.[id];
@@ -668,11 +752,14 @@ class ThorWeatherCard extends HTMLElement {
     const rainId = c.rain_total_entity || c.rain_today_entity;
     const wantClimate = c.show_climate_days || c.show_climate_chart || c.show_rain_chart || c.show_rain;
     const wantWind = c.show_wind_averages && c.wind_direction_entity;
-    const [tStats, rStats, wDir, wSpd] = await Promise.all([
+    const radId = c[this._radKey()] || "";
+    const wantSun = radId && (c.show_sun_chart || c.show_climate_days);
+    const [tStats, rStats, wDir, wSpd, sStats] = await Promise.all([
       wantClimate && c.outdoor_temp_entity ? this._stats([c.outdoor_temp_entity], startLast, now, "day", ["min", "max", "mean"]) : {},
       wantClimate && rainId ? this._stats([rainId], startLast, now, "day", ["change", "max"]) : {},
       wantWind ? this._stats([c.wind_direction_entity], now - 366 * DAY, now, "hour", ["mean"]) : {},
       wantWind && c.wind_speed_entity ? this._stats([c.wind_speed_entity], now - 366 * DAY, now, "hour", ["mean"]) : {},
+      wantSun ? this._stats([radId], c.show_climate_days ? startLast : now - (c.sun_days + 1) * DAY, now, "hour", ["mean"]) : {},
     ]);
     if (token !== this._token) return;
     this._daily = {
@@ -684,6 +771,8 @@ class ThorWeatherCard extends HTMLElement {
       dir: wDir[c.wind_direction_entity] || [],
       spd: (wSpd[c.wind_speed_entity] || []).map((r) => ({ ...r, mean: ok(r.mean) ? r.mean * f : r.mean })),
     };
+    const rk = this._radKey();
+    this._sunHourly = (sStats[radId] || []).map((r) => ({ start: r.start, w: this._radW(r.mean, rk) })).filter((r) => ok(r.w));
     this._lastStats = now;
   }
 
@@ -737,10 +826,11 @@ class ThorWeatherCard extends HTMLElement {
     return "dry";
   }
 
-  _windStats(ms) {
+  _windStats(ms, gust = false) {
     const now = Date.now();
     const dir = this._series("wind_direction_entity").slice();
-    const spd = this._series("wind_speed_entity").map((p) => ({ t: p.t, v: p.v * this._kmhFactor("wind_speed_entity") }));
+    const sk = gust && this._config.wind_gust_entity ? "wind_gust_entity" : "wind_speed_entity";
+    const spd = this._series(sk).map((p) => ({ t: p.t, v: p.v * this._kmhFactor(sk) }));
     const ld = this._live("wind_direction_entity");
     if (ld && ok(ld.v) && (!dir.length || dir[dir.length - 1].t < ld.t)) dir.push(ld);
     if (!dir.length) return null;
@@ -835,7 +925,7 @@ class ThorWeatherCard extends HTMLElement {
     this._lastRender = Date.now();
     const c = this._config;
     const t = this._t;
-    const hasAny = ENTITY_KEYS.some((k) => c[k]);
+    const hasAny = HIST_KEYS.some((k) => c[k]);
     let body = "";
     if (!hasAny) body = `<div class="empty">${esc(t.missing)}</div>`;
     else if (c.layout === "stack") body = c.tabs.map((tab) => this._tabBody(tab)).join("");
@@ -857,6 +947,11 @@ class ThorWeatherCard extends HTMLElement {
       this._rose = b.dataset.rose;
       this._render();
     }));
+    this.shadowRoot.querySelectorAll("[data-rmode]").forEach((b) => b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      this._roseMode = b.dataset.rmode;
+      this._render();
+    }));
     this.shadowRoot.querySelectorAll("[data-more]").forEach((el) => el.addEventListener("click", () => {
       const id = c[el.dataset.more];
       if (id) this.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: id }, bubbles: true, composed: true }));
@@ -873,9 +968,15 @@ class ThorWeatherCard extends HTMLElement {
       if (c.show_gauges) parts.push(this._gauges());
       if (c.show_temps) parts.push(this._temps());
       if (c.show_uv && c.uv_entity) parts.push(this._uv());
+    } else if (tab === "sun") {
+      if (c.show_sun_arc) parts.push(this._sunArc());
+      if (c.show_sun_uv && c.uv_entity) parts.push(this._uvSun());
+      if (c.show_radiation && this._radKey()) parts.push(this._radiation());
+      if (c.show_sun_chart && this._radKey()) parts.push(this._sunChart());
     } else if (tab === "wind") {
       if (c.show_compass && c.wind_direction_entity) parts.push(this._compassBlock());
       if (c.show_wind_averages && c.wind_direction_entity) parts.push(this._averages());
+      if (c.show_gust_chart && (c.wind_speed_entity || c.wind_gust_entity)) parts.push(this._gustChart());
       if (c.show_windrose && c.wind_direction_entity) parts.push(this._windrose());
       if (c.show_wind_values) parts.push(this._windValues());
     } else if (tab === "rain") {
@@ -918,6 +1019,11 @@ class ThorWeatherCard extends HTMLElement {
       const s = this._speed(kmh);
       const dir = this._val("wind_direction_entity");
       chips.push(this._chip("mdi:weather-windy", t.wind, `${ok(dir) ? this._cardinal(dir) + " " : ""}${s.v} ${s.u} · ${beaufort(kmh)} Bft`, "wind_speed_entity"));
+    }
+    const gk = this._kmh("wind_gust_entity");
+    if (ok(gk)) {
+      const s = this._speed(gk);
+      chips.push(this._chip("mdi:weather-windy-variant", t.gusts, `${s.v} ${s.u} · ${beaufort(gk)} Bft`, "wind_gust_entity"));
     }
     const rt = this._rainToday();
     if (ok(rt)) chips.push(this._chip("mdi:weather-rainy", `${t.rain} ${t.today}`, `${this._fmt(rt)} ${this._rainUnit()}`, c.rain_today_entity ? "rain_today_entity" : "rain_total_entity"));
@@ -1180,6 +1286,277 @@ class ThorWeatherCard extends HTMLElement {
     </div>`;
   }
 
+  /* --------------------------------------------------------------- Sonne */
+
+  _loc() {
+    const cf = this._hass?.config;
+    if (cf && ok(num(cf.latitude)) && ok(num(cf.longitude))) return { lat: num(cf.latitude), lon: num(cf.longitude) };
+    return null;
+  }
+
+  _radKey() {
+    const c = this._config;
+    return c.radiation_entity ? "radiation_entity" : c.illuminance_entity ? "illuminance_entity" : "";
+  }
+
+  /** Strahlungswert eines Sensors in W/m² (Lux werden genähert umgerechnet) */
+  _radW(v, key) {
+    if (!ok(v)) return NaN;
+    return /lx|lux/i.test(this._unit(key)) ? v * LUX_TO_WM2 : v;
+  }
+
+  _radSeries() {
+    const k = this._radKey();
+    if (!k) return [];
+    const pts = this._series(k).map((p) => ({ t: p.t, v: this._radW(p.v, k) }));
+    const l = this._live(k);
+    if (l && ok(l.v)) pts.push({ t: Date.now(), v: this._radW(l.v, k) });
+    return pts;
+  }
+
+  _dur(ms) {
+    const m = Math.round(Math.abs(ms) / 60000);
+    return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`;
+  }
+
+  _sunNow() {
+    const loc = this._loc();
+    if (loc) return solarPos(Date.now(), loc.lat, loc.lon);
+    const a = this._state("sun_entity")?.attributes;
+    return a ? { el: num(a.elevation), az: num(a.azimuth) } : null;
+  }
+
+  _sunArc() {
+    const t = this._t;
+    const loc = this._loc();
+    const now = Date.now();
+    const pos = this._sunNow();
+    if (!loc && !pos) return "";
+    let svg = "", info = [];
+    if (loc) {
+      const st = sunTimes(now, loc.lat, loc.lon);
+      const sy = sunTimes(now - DAY, loc.lat, loc.lon);
+      const W = 320, H = 130, top = 14, hor = 96;
+      const d0 = new Date(now).setHours(0, 0, 0, 0), d1 = d0 + DAY;
+      const X = (tt) => ((tt - d0) / (d1 - d0)) * W;
+      const maxEl = Math.max(10, solarPos(st.noon, loc.lat, loc.lon).el);
+      const minEl = -Math.max(10, Math.min(30, maxEl / 2));
+      const Y = (el) => (el >= 0 ? hor - (el / maxEl) * (hor - top) : hor + (el / minEl) * (H - hor - 4));
+      let d = "", dDay = "";
+      for (let tt = d0; tt <= d1; tt += 10 * 60000) {
+        const el = solarPos(tt, loc.lat, loc.lon).el;
+        d += `${d ? "L" : "M"}${X(tt).toFixed(1)},${Y(el).toFixed(1)} `;
+        if (el >= 0) dDay += `${dDay ? "L" : "M"}${X(tt).toFixed(1)},${Y(el).toFixed(1)} `;
+      }
+      svg += `<defs><linearGradient id="thor-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fcd34d" stop-opacity=".45"/><stop offset="1" stop-color="#fcd34d" stop-opacity="0"/></linearGradient></defs>`;
+      if (st.rise && st.set) svg += `<path d="${dDay} L${X(st.set).toFixed(1)},${hor} L${X(st.rise).toFixed(1)},${hor} Z" fill="url(#thor-sky)"/>`;
+      svg += `<path d="${d}" fill="none" stroke="var(--secondary-text-color)" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>`;
+      if (dDay) svg += `<path d="${dDay}" fill="none" stroke="#f59e0b" stroke-width="2.2"/>`;
+      svg += `<line x1="0" x2="${W}" y1="${hor}" y2="${hor}" class="axis"/>`;
+      for (let h = 0; h <= 24; h += 6) svg += `<text x="${Math.min(W - 8, Math.max(8, (h / 24) * W)).toFixed(1)}" y="${H - 2}" class="bl muted">${String(h).padStart(2, "0")}</text>`;
+      if (st.rise) svg += `<circle cx="${X(st.rise).toFixed(1)}" cy="${hor}" r="2.5" fill="#f59e0b"/>`;
+      if (st.set) svg += `<circle cx="${X(st.set).toFixed(1)}" cy="${hor}" r="2.5" fill="#f97316"/>`;
+      const pe = pos.el;
+      svg += `<circle cx="${X(now).toFixed(1)}" cy="${Y(pe).toFixed(1)}" r="${pe >= 0 ? 8 : 6}" fill="${pe >= 0 ? "#fbbf24" : "#64748b"}" stroke="${pe >= 0 ? "#f59e0b" : "#475569"}" stroke-width="2" ${pe >= 0 ? 'class="sunglow"' : ""}/>`;
+      svg = `<svg viewBox="0 0 ${W} ${H}" class="sunarc">${svg}</svg>`;
+      if (st.rise) {
+        const len = st.set - st.rise;
+        const diff = sy.rise ? len - (sy.set - sy.rise) : NaN;
+        info.push(this._chip("mdi:weather-sunset-up", t.sunrise, this._time(st.rise)));
+        info.push(this._chip("mdi:weather-sunset-down", t.sunset, this._time(st.set)));
+        info.push(this._chip("mdi:timer-sand", t.daylength, `${this._dur(len)}${ok(diff) ? ` (${diff >= 0 ? "+" : "−"}${Math.round(Math.abs(diff) / 60000)} min)` : ""}`));
+      }
+      info.push(this._chip("mdi:weather-sunny", t.noon, `${this._time(st.noon)} · ${this._fmt(maxEl, 1)}°`));
+    }
+    if (pos && ok(pos.el)) {
+      info.push(this._chip("mdi:angle-acute", t.elevation, pos.el >= 0 ? `${this._fmt(pos.el, 1)}°` : `${this._fmt(pos.el, 1)}° · ${t.below_horizon}`, "sun_entity"));
+      info.push(this._chip("mdi:compass-outline", t.azimuth, `${this._fmt(pos.az, 0)}° · ${this._cardinal(pos.az)}`, "sun_entity"));
+    }
+    return `<div class="panel">${svg}<div class="chips ex">${info.join("")}</div></div>`;
+  }
+
+  _uvSun() {
+    const t = this._t;
+    const c = this._config;
+    const uv = this._val("uv_entity");
+    if (!ok(uv)) return "";
+    const d0 = new Date().setHours(0, 0, 0, 0);
+    const pts = this._series("uv_entity").slice();
+    pts.push({ t: Date.now(), v: uv });
+    // Dosis: UVI × 0,025 W/m² → J/m²; 1 SED = 100 J/m²
+    let dose = 0;
+    for (const sg of stepSegments(pts, d0, Date.now())) dose += Math.max(0, sg.v) * 0.025 * ((sg.t1 - sg.t0) / 1000);
+    const sed = dose / 100;
+    const sk = clamp(Math.round(num(c.skin_type) || 2), 1, 6);
+    const burn = MED.map((m, i) => {
+      const min = uv > 0.2 ? m / (uv * 0.025 * 60) : Infinity;
+      const txt = !ok(min) || min > 600 ? t.no_burn : min >= 60 ? `${Math.floor(min / 60)} h ${Math.round(min % 60)} min` : `${Math.round(min)} min`;
+      return `<div class="skin ${i + 1 === sk ? "on" : ""}"><span class="sk sk${i + 1}"></span><span>${["I", "II", "III", "IV", "V", "VI"][i]}</span><b>${esc(txt)}</b></div>`;
+    }).join("");
+    // UV-Kurve heute
+    const loc = this._loc();
+    const st = loc ? sunTimes(Date.now(), loc.lat, loc.lon) : null;
+    const from = st?.rise ? st.rise - HOUR : d0 + 5 * HOUR;
+    const to = st?.set ? st.set + HOUR : d0 + 21 * HOUR;
+    const W = 320, H = 90, top = 6, bot = 14;
+    const mx = Math.max(3, ...pts.filter((p) => p.t >= d0).map((p) => p.v).filter(ok));
+    const X = (tt) => ((tt - from) / (to - from)) * W;
+    const Y = (v) => top + (1 - v / mx) * (H - top - bot);
+    let bands = "";
+    [[0, 3], [3, 6], [6, 8], [8, 11], [11, 20]].forEach(([a, b], i) => {
+      if (a >= mx) return;
+      bands += `<rect x="0" width="${W}" y="${Y(Math.min(b, mx)).toFixed(1)}" height="${(Y(a) - Y(Math.min(b, mx))).toFixed(1)}" fill="${["#3ea72d", "#fff300", "#f18b00", "#e53210", "#b567a4"][i]}" opacity=".12"/>`;
+    });
+    let d = "";
+    const seg = pts.filter((p) => p.t >= from && p.t <= to && ok(p.v));
+    const v0 = valueAt(pts, from);
+    if (ok(v0)) seg.unshift({ t: from, v: v0 });
+    seg.forEach((p, i) => {
+      if (i) d += `L${X(p.t).toFixed(1)},${Y(seg[i - 1].v).toFixed(1)} `;
+      d += `${i ? "L" : "M"}${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)} `;
+    });
+    const nowX = X(Date.now());
+    let ticks = "";
+    for (let h = Math.ceil((from - d0) / HOUR / 3) * 3; h * HOUR + d0 <= to; h += 3) ticks += `<text x="${X(d0 + h * HOUR).toFixed(1)}" y="${H - 2}" class="bl muted">${String(h).padStart(2, "0")}</text>`;
+    const curve = `<svg viewBox="0 0 ${W} ${H}" class="bars">${bands}${d ? `<path d="${d} L${X(seg[seg.length - 1].t).toFixed(1)},${H - bot} L${X(seg[0].t).toFixed(1)},${H - bot} Z" fill="#a855f7" opacity=".18"/><path d="${d}" fill="none" stroke="#a855f7" stroke-width="1.8"/>` : ""}${nowX > 0 && nowX < W ? `<line x1="${nowX.toFixed(1)}" x2="${nowX.toFixed(1)}" y1="${top}" y2="${H - bot}" stroke="var(--thor-accent)" stroke-dasharray="3 2"/>` : ""}<line x1="0" x2="${W}" y1="${H - bot}" y2="${H - bot}" class="axis"/>${ticks}</svg>`;
+    return `${this._uv()}
+      <div class="panel">
+        <div class="panel-t row"><span>${esc(t.uv_curve)}</span><span class="small muted">${esc(t.uv_dose)}: <b>${this._fmt(sed, 1)} ${t.sed}</b> (${this._fmt(dose / 1000, 2)} kJ/m²)</span></div>
+        ${curve}
+        <div class="panel-t small" style="margin-top:8px">${esc(t.burn)} · ${esc(t.skin)}</div>
+        ${uv > 0.2 ? `<div class="skins">${burn}</div>` : `<div class="small muted">${esc(t.no_burn)}</div>`}
+      </div>`;
+  }
+
+  _sunshine(pts, from, to) {
+    const thr = num(this._config.sunshine_threshold) || 120;
+    let sun = 0, wh = 0, mx = null;
+    for (const sg of stepSegments(pts, from, to)) {
+      const h = (sg.t1 - sg.t0) / HOUR;
+      if (sg.v >= thr) sun += sg.t1 - sg.t0;
+      wh += Math.max(0, sg.v) * h;
+    }
+    for (const p of pts) if (p.t >= from && p.t <= to && ok(p.v) && (!mx || p.v > mx.v)) mx = p;
+    return { sun, kwh: wh / 1000, max: mx };
+  }
+
+  _radiation() {
+    const t = this._t;
+    const k = this._radKey();
+    const raw = this._val(k);
+    if (!ok(raw)) return "";
+    const w = this._radW(raw, k);
+    const pts = this._radSeries();
+    const d0 = new Date().setHours(0, 0, 0, 0);
+    const today = this._sunshine(pts, d0, Date.now());
+    const pos = this._sunNow();
+    const loc = this._loc();
+    const cs = pos && ok(pos.el) ? clearSky(pos.el) : NaN;
+    const ratio = ok(cs) && pos.el > 5 && cs > 50 ? clamp(w / cs, 0, 1.3) : NaN;
+    const sky = ok(ratio) ? t.sky[ratio < 0.15 ? 0 : ratio < 0.4 ? 1 : ratio < 0.7 ? 2 : 3] : "";
+    const isLux = /lx|lux/i.test(this._unit(k));
+    const tiles = [];
+    const tile = (l, v, icon) => tiles.push(`<div class="rtile"><ha-icon icon="${icon}"></ha-icon><div class="rl2">${esc(l)}</div><div class="rv">${v}</div></div>`);
+    tile(t.rad_now, `${this._fmt(w, 0)} <span class="u">W/m²</span>`, "mdi:white-balance-sunny");
+    if (ok(cs) && cs > 0) tile(t.clear_sky, `${this._fmt(cs, 0)} <span class="u">W/m²</span>`, "mdi:weather-sunny");
+    if (ok(ratio)) tile(t.clearness, `${Math.round(ratio * 100)} <span class="u">%</span>`, "mdi:weather-partly-cloudy");
+    tile(t.sunshine, this._dur(today.sun), "mdi:sun-clock");
+    tile(t.energy, `${this._fmt(today.kwh, 2)} <span class="u">kWh/m²</span>`, "mdi:solar-power-variant");
+    if (today.max && today.max.v > 0) tile(t.rad_max, `${this._fmt(today.max.v, 0)} <span class="u">W/m² · ${this._time(today.max.t)}</span>`, "mdi:arrow-collapse-up");
+    if (isLux || this._config.illuminance_entity) {
+      const lx = this._config.illuminance_entity ? this._val("illuminance_entity") : raw;
+      if (ok(lx)) tile(this._lang === "de" ? "Helligkeit" : "Illuminance", `${this._fmt(lx, 0)} <span class="u">lx</span>`, "mdi:brightness-5");
+    }
+    // Tagesverlauf mit Klarhimmel-Kurve
+    let chart = "";
+    if (pts.length > 1) {
+      const st = loc ? sunTimes(Date.now(), loc.lat, loc.lon) : null;
+      const from = st?.rise ? st.rise - HOUR : d0 + 5 * HOUR;
+      const to = st?.set ? st.set + HOUR : d0 + 21 * HOUR;
+      const W = 320, H = 110, top = 8, bot = 14;
+      const csMax = loc ? clearSky(solarPos(st.noon, loc.lat, loc.lon).el) : 0;
+      const mx = Math.max(100, csMax, ...pts.filter((p) => p.t >= from).map((p) => p.v).filter(ok)) * 1.05;
+      const X = (tt) => ((tt - from) / (to - from)) * W;
+      const Y = (v) => top + (1 - v / mx) * (H - top - bot);
+      let d = "";
+      const seg = pts.filter((p) => p.t >= from && p.t <= Math.min(to, Date.now()) && ok(p.v));
+      const v0 = valueAt(pts, from);
+      if (ok(v0)) seg.unshift({ t: from, v: v0 });
+      seg.forEach((p, i) => { d += `${i ? "L" : "M"}${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)} `; });
+      let csd = "";
+      if (loc) for (let tt = from; tt <= to; tt += 10 * 60000) csd += `${csd ? "L" : "M"}${X(tt).toFixed(1)},${Y(clearSky(solarPos(tt, loc.lat, loc.lon).el)).toFixed(1)} `;
+      const thr = num(this._config.sunshine_threshold) || 120;
+      let ticks = "";
+      for (let h = Math.ceil((from - d0) / HOUR / 3) * 3; h * HOUR + d0 <= to; h += 3) ticks += `<text x="${X(d0 + h * HOUR).toFixed(1)}" y="${H - 2}" class="bl muted">${String(h).padStart(2, "0")}</text>`;
+      const nowX = X(Date.now());
+      chart = `<svg viewBox="0 0 ${W} ${H}" class="bars">
+        <defs><linearGradient id="thor-rad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f59e0b" stop-opacity=".55"/><stop offset="1" stop-color="#fcd34d" stop-opacity=".1"/></linearGradient></defs>
+        <line x1="0" x2="${W}" y1="${Y(thr).toFixed(1)}" y2="${Y(thr).toFixed(1)}" stroke="#f59e0b" stroke-width=".6" stroke-dasharray="1 3"/>
+        ${csd ? `<path d="${csd}" fill="none" stroke="var(--secondary-text-color)" stroke-dasharray="4 3" stroke-width="1"/>` : ""}
+        ${d && seg.length > 1 ? `<path d="${d} L${X(seg[seg.length - 1].t).toFixed(1)},${H - bot} L${X(seg[0].t).toFixed(1)},${H - bot} Z" fill="url(#thor-rad)"/><path d="${d}" fill="none" stroke="#f59e0b" stroke-width="1.6"/>` : ""}
+        ${nowX > 0 && nowX < W ? `<line x1="${nowX.toFixed(1)}" x2="${nowX.toFixed(1)}" y1="${top}" y2="${H - bot}" stroke="var(--thor-accent)" stroke-dasharray="3 2"/>` : ""}
+        <line x1="0" x2="${W}" y1="${H - bot}" y2="${H - bot}" class="axis"/>${ticks}</svg>
+        <div class="legend center small"><span><i style="background:#f59e0b"></i>${esc(t.rad_title)}</span>${csd ? `<span><i class="dash grey"></i>${esc(t.clear_sky)}</span>` : ""}<span><i class="dot"></i>${this._lang === "de" ? "Sonnenschein ab" : "Sunshine from"} ${thr} W/m²</span></div>`;
+    }
+    return `<div class="panel" data-more="${k}">
+      <div class="panel-t row"><span>${esc(t.rad_title)}</span>${sky ? `<span class="small muted">${esc(sky)}</span>` : ""}</div>
+      <div class="rtiles">${tiles.join("")}</div>
+      ${chart ? `<div class="panel-t small" style="margin-top:8px">${esc(t.day_curve)}</div>${chart}` : ""}
+    </div>`;
+  }
+
+  /** Sonnenstunden + Energie je Tag aus Stundenstatistik, heute live */
+  _sunDays() {
+    const thr = num(this._config.sunshine_threshold) || 120;
+    const map = new Map();
+    const key = (tt) => new Date(tt).setHours(0, 0, 0, 0);
+    for (const r of this._sunHourly || []) {
+      const k = key(r.start);
+      const e = map.get(k) || { t: k, h: 0, kwh: 0 };
+      if (r.w >= thr) e.h += 1;
+      e.kwh += Math.max(0, r.w) / 1000;
+      map.set(k, e);
+    }
+    const today = key(Date.now());
+    const s = this._sunshine(this._radSeries(), today, Date.now());
+    map.set(today, { t: today, h: s.sun / HOUR, kwh: s.kwh });
+    return map;
+  }
+
+  _sunChart() {
+    const c = this._config;
+    const t = this._t;
+    if (!this._sunHourly) return "";
+    const map = this._sunDays();
+    const n = c.sun_days;
+    const today = new Date().setHours(0, 0, 0, 0);
+    const list = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(today - i * DAY + 12 * HOUR).setHours(0, 0, 0, 0);
+      list.push(map.get(d) || { t: d, h: 0, kwh: 0, none: true });
+    }
+    if (list.every((x) => x.none)) return "";
+    const W = 320, H = 120, padB = 18, padT = 14;
+    const mx = Math.max(4, ...list.map((x) => x.h));
+    const bw = W / n;
+    let s = "";
+    list.forEach((d, i) => {
+      const x = i * bw;
+      const h = (d.h / mx) * (H - padB - padT);
+      if (d.h > 0) {
+        s += `<rect x="${(x + bw * 0.15).toFixed(1)}" y="${(H - padB - h).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" rx="2" fill="#f59e0b"><title>${this._date(d.t)}: ${this._fmt(d.h, 1)} h · ${this._fmt(d.kwh, 2)} kWh/m²</title></rect>`;
+        if (n <= 21 || d.h >= mx * 0.3) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${(H - padB - h - 3).toFixed(1)}" class="bl">${this._fmt(d.h, d.h < 10 ? 1 : 0)}</text>`;
+      }
+      const every = n > 21 ? 7 : n > 14 ? 2 : 1;
+      if ((n - 1 - i) % every === 0) s += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 5}" class="bl muted">${new Date(d.t).getDate()}.</text>`;
+    });
+    s += `<line x1="0" x2="${W}" y1="${H - padB}" y2="${H - padB}" class="axis"/>`;
+    const sum = list.reduce((a, b) => a + b.h, 0);
+    const kwh = list.reduce((a, b) => a + b.kwh, 0);
+    return `<div class="panel"><div class="panel-t row"><span>${esc(t.sun_days_title)}</span><span class="small muted">${n} ${this._lang === "de" ? "Tage" : "days"}: <b>${this._fmt(sum, 0)} h</b> · ${this._fmt(kwh, 1)} kWh/m²</span></div>
+      <svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg></div>`;
+  }
+
   /* ---------------------------------------------------------------- Wind */
 
   _houseImage(cx, cy, r, clipId) {
@@ -1235,21 +1612,133 @@ class ThorWeatherCard extends HTMLElement {
     if (ok(dir)) s += this._arrow(cx, cy, r, dir, "var(--thor-accent)", 10);
     const sp = this._speed(kmh);
     const bf = beaufort(kmh);
+    const g = this._speed(gust);
     s += `<text x="${cx}" y="${cy - 18}" class="c-dir">${ok(dir) ? this._cardinal(dir) : "–"}</text>
       <text x="${cx}" y="${cy + 2}" class="c-deg">${ok(dir) ? Math.round(dir) + "°" : ""}</text>
-      <text x="${cx}" y="${cy + 26}" class="c-spd">${sp.v}<tspan class="c-u" dx="3">${esc(sp.u)}</tspan></text>`;
-    const g = this._speed(gust);
+      <text x="${cx}" y="${cy + 26}" class="c-spd">${sp.v}<tspan class="c-u" dx="3">${esc(sp.u)}</tspan></text>
+      ${ok(gust) ? `<text x="${cx}" y="${cy + 48}" class="c-gust">${esc(t.gusts)} ${g.v} ${esc(g.u)}</text>` : ""}`;
     return `<div class="panel compass" data-more="wind_direction_entity">
       <svg viewBox="0 0 220 220" class="cmp">${s}</svg>
       <div class="cinfo">
         <div class="panel-t">${esc(t.wind)}</div>
         <div class="big">${ok(bf) ? `${bf} <span class="u">Bft</span>` : "–"}</div>
         <div>${ok(bf) ? esc(t.bft[bf]) : ""}</div>
-        ${ok(gust) ? `<div class="small">${esc(t.gusts)}: <b>${g.v} ${esc(g.u)}</b> · ${beaufort(gust)} Bft</div>` : ""}
+        ${this._windBars(kmh, gust)}
         ${spread && spread.width > 2 ? `<div class="small muted">${esc(t.variability)}: ±${Math.round(spread.width / 2)}°</div>` : ""}
         <div class="legend small"><span><i style="background:var(--thor-accent)"></i>${esc(t.direction)}</span>${ws && ok(ws.mean) ? `<span><i style="background:var(--thor-blue)"></i>Ø 10 min</span>` : ""}</div>
       </div>
     </div>`;
+  }
+
+  _gustInfo(ms = 10 * 60000) {
+    // Böenfaktor = Spitzenböe / Mittelwind im Zeitraum
+    const now = Date.now();
+    const fw = this._kmhFactor("wind_speed_entity"), fg = this._kmhFactor("wind_gust_entity");
+    const w = this._series("wind_speed_entity").map((p) => ({ t: p.t, v: p.v * fw }));
+    const g = this._series("wind_gust_entity").map((p) => ({ t: p.t, v: p.v * fg }));
+    let sum = 0, tot = 0;
+    for (const sg of stepSegments(w, now - ms, now)) { sum += sg.v * (sg.t1 - sg.t0); tot += sg.t1 - sg.t0; }
+    const mean = tot ? sum / tot : this._kmh("wind_speed_entity");
+    const mm = minMax(g, now - ms, now, { t: now, v: this._kmh("wind_gust_entity") });
+    const peak = mm.max?.v;
+    const factor = ok(mean) && mean >= 3 && ok(peak) ? peak / mean : NaN;
+    return { mean, peak, factor, level: !ok(factor) ? -1 : factor < 1.3 ? 0 : factor < 1.6 ? 1 : factor < 2 ? 2 : 3 };
+  }
+
+  _windBars(kmh, gust) {
+    const t = this._t;
+    if (!ok(kmh) && !ok(gust)) return "";
+    const top = Math.max(20, ...[kmh, gust].filter(ok)) * 1.15;
+    const bar = (label, v, cls) => {
+      if (!ok(v)) return "";
+      const s = this._speed(v);
+      return `<div class="wbar"><span>${esc(label)}</span><div class="wtrack"><div class="wfill ${cls}" style="width:${clamp((v / top) * 100, 1, 100).toFixed(1)}%"></div></div><b>${s.v} ${esc(s.u)}</b><span class="muted">${beaufort(v)} Bft</span></div>`;
+    };
+    const gi = this._config.wind_gust_entity ? this._gustInfo() : null;
+    return `<div class="wbars">${bar(t.mean_wind, kmh, "w")}${bar(t.gusts, gust, "g")}</div>
+      ${gi && gi.level >= 0 ? `<div class="small">${esc(t.gustiness)}: <b>${esc(t.gusty[gi.level])}</b> <span class="muted">· ${esc(t.gust_factor)} ${this._fmt(gi.factor, 1)}</span></div>` : ""}`;
+  }
+
+  _gustChart() {
+    const c = this._config;
+    const t = this._t;
+    const now = Date.now(), from = now - DAY;
+    const fw = this._kmhFactor("wind_speed_entity"), fg = this._kmhFactor("wind_gust_entity");
+    const w = this._series("wind_speed_entity").map((p) => ({ t: p.t, v: p.v * fw }));
+    const g = c.wind_gust_entity ? this._series("wind_gust_entity").map((p) => ({ t: p.t, v: p.v * fg })) : [];
+    if (w.length < 2 && g.length < 2) return "";
+    // auf 10-Minuten-Raster: Wind = Mittel, Böen = Maximum
+    const B = 10 * 60000, n = Math.ceil(DAY / B);
+    const wb = new Array(n).fill(NaN), gb = new Array(n).fill(NaN);
+    const acc = new Array(n).fill(0), dur = new Array(n).fill(0);
+    for (const sg of stepSegments(w, from, now)) {
+      for (let tt = sg.t0; tt < sg.t1;) {
+        const i = Math.min(n - 1, Math.floor((tt - from) / B));
+        const end = Math.min(sg.t1, from + (i + 1) * B);
+        acc[i] += sg.v * (end - tt); dur[i] += end - tt; tt = end;
+      }
+    }
+    acc.forEach((a, i) => (wb[i] = dur[i] ? a / dur[i] : NaN));
+    for (const sg of stepSegments(g, from, now)) {
+      const i0 = Math.floor((sg.t0 - from) / B), i1 = Math.min(n - 1, Math.floor((sg.t1 - 1 - from) / B));
+      for (let i = i0; i <= i1; i++) gb[i] = ok(gb[i]) ? Math.max(gb[i], sg.v) : sg.v;
+    }
+    const all = [...wb, ...gb].filter(ok);
+    if (!all.length) return "";
+    const W = 320, H = 130, L = 26, top = 8, bot = 16;
+    const mxKmh = Math.max(12, ...all) * 1.1;
+    const X = (i) => L + ((i + 0.5) / n) * (W - L);
+    const Y = (v) => top + (1 - v / mxKmh) * (H - top - bot);
+    let s = "";
+    // Beaufort-Linien
+    for (let b = 1; b < BFT_KMH.length; b++) {
+      const v = BFT_KMH[b - 1];
+      if (v > mxKmh) break;
+      if (v < 6 && mxKmh > 40) continue;
+      s += `<line x1="${L}" x2="${W}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="grid"/><text x="${L - 3}" y="${Y(v).toFixed(1)}" class="al" text-anchor="end">${b}</text>`;
+    }
+    const path = (arr) => {
+      let d = "", pen = false;
+      arr.forEach((v, i) => {
+        if (!ok(v)) { pen = false; return; }
+        d += `${pen ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)} `;
+        pen = true;
+      });
+      return d;
+    };
+    const dw = path(wb), dg = path(gb);
+    // Fläche Wind
+    if (dw) {
+      const idx = wb.map((v, i) => (ok(v) ? i : -1)).filter((i) => i >= 0);
+      s += `<path d="${dw} L${X(idx[idx.length - 1]).toFixed(1)},${H - bot} L${X(idx[0]).toFixed(1)},${H - bot} Z" fill="var(--thor-blue)" opacity=".22"/><path d="${dw}" fill="none" stroke="var(--thor-blue)" stroke-width="1.8"/>`;
+    }
+    if (dg) s += `<path d="${dg}" fill="none" stroke="var(--thor-gust)" stroke-width="1.2" opacity=".95"/>`;
+    // Spitzen markieren
+    const gi = gb.reduce((b, v, i) => (ok(v) && (b < 0 || v > gb[b]) ? i : b), -1);
+    if (gi >= 0) s += `<circle cx="${X(gi).toFixed(1)}" cy="${Y(gb[gi]).toFixed(1)}" r="3" fill="var(--thor-gust)"/><text x="${clamp(X(gi), L + 20, W - 20).toFixed(1)}" y="${(Y(gb[gi]) - 7).toFixed(1)}" class="bl">${this._speed(gb[gi]).v}</text>`;
+    s += `<line x1="${L}" x2="${W}" y1="${H - bot}" y2="${H - bot}" class="axis"/>`;
+    for (let h = 0; h <= 24; h += 6) {
+      const tt = from + h * HOUR;
+      s += `<text x="${clamp(L + (h / 24) * (W - L), L + 10, W - 12).toFixed(1)}" y="${H - 3}" class="bl muted">${this._time(tt)}</text>`;
+    }
+    const gi24 = c.wind_gust_entity ? this._gustInfo(DAY) : null;
+    if (gi24) {
+      // Böenfaktor je 10-min-Intervall (nur bei Wind ≥ 5 km/h), Median
+      const fs = gb.map((gv, i) => (ok(gv) && ok(wb[i]) && wb[i] >= 5 ? gv / wb[i] : NaN)).filter(ok).sort((a, b) => a - b);
+      gi24.factor = fs.length ? fs[Math.floor(fs.length / 2)] : NaN;
+      gi24.level = !ok(gi24.factor) ? -1 : gi24.factor < 1.3 ? 0 : gi24.factor < 1.6 ? 1 : gi24.factor < 2 ? 2 : 3;
+    }
+    const wmax = Math.max(...wb.filter(ok));
+    const sm = this._speed(wmax), sg = gi24 && ok(gi24.peak) ? this._speed(gi24.peak) : null, sa = this._speed(gi24?.mean);
+    return `<div class="panel"><div class="panel-t row"><span>${esc(t.gust_chart)}</span><span class="small muted">${this._lang === "de" ? "Achse" : "axis"}: Beaufort</span></div>
+      <svg viewBox="0 0 ${W} ${H}" class="bars">${s}</svg>
+      <div class="legend center small"><span><i style="background:var(--thor-blue)"></i>${esc(t.mean_wind)} (Ø 10 min)</span>${dg ? `<span><i style="background:var(--thor-gust)"></i>${esc(t.gusts)} (max 10 min)</span>` : ""}</div>
+      <div class="chips ex">
+        ${gi24 && ok(gi24.mean) ? this._chip("mdi:weather-windy", `Ø ${t.mean_wind} 24 h`, `${sa.v} ${sa.u}`, "wind_speed_entity") : ""}
+        ${ok(wmax) ? this._chip("mdi:arrow-up-bold-outline", `${t.mean_wind} ${t.max}`, `${sm.v} ${sm.u} · ${beaufort(wmax)} Bft`, "wind_speed_entity") : ""}
+        ${sg ? this._chip("mdi:weather-windy-variant", `${t.gust_peak} 24 h`, `${sg.v} ${sg.u} · ${beaufort(gi24.peak)} Bft`, "wind_gust_entity") : ""}
+        ${gi24 && gi24.level >= 0 ? this._chip("mdi:chart-bell-curve-cumulative", t.gustiness, `${t.gusty[gi24.level]} · ${this._fmt(gi24.factor, 1)}`) : ""}
+      </div></div>`;
   }
 
   _dirSpread(ms) {
@@ -1308,7 +1797,8 @@ class ThorWeatherCard extends HTMLElement {
     const c = this._config;
     const t = this._t;
     const ms = ROSE_PERIODS[this._rose] || DAY;
-    const st = this._windStats(ms);
+    const gustMode = this._roseMode === "gust" && !!c.wind_gust_entity;
+    const st = this._windStats(ms, gustMode);
     const cx = 150, cy = 150, R = 112, r0 = 16;
     let s = this._houseImage(cx, cy, R, "thor-rclip");
     let maxPct = 0;
@@ -1353,10 +1843,11 @@ class ThorWeatherCard extends HTMLElement {
     const unit = c.wind_unit === "bft" ? "" : ` <span class="muted">(${esc(this._speed(1).u)})</span>`;
     const btns = c.windrose_periods.map((p) => `<button class="pbtn ${p === this._rose ? "on" : ""}" data-rose="${p}">${esc(this._periodLabel(p))}</button>`).join("");
     return `<div class="panel">
-      <div class="panel-t row"><span>${esc(t.rose)}</span>${st && st.top >= 0 ? `<span class="small muted">${esc(t.rose_top)}: <b>${this._cardinal(st.top * 22.5)}</b> · ${esc(t.rose_calm)} ${Math.round(st.calmPct)} %</span>` : ""}</div>
+      <div class="panel-t row"><span>${esc(t.rose)}${gustMode ? ` · <span style="color:var(--thor-gust)">${esc(t.gust_mode)}</span>` : ""}</span>${st && st.top >= 0 ? `<span class="small muted">${esc(t.rose_top)}: <b>${this._cardinal(st.top * 22.5)}</b> · ${esc(t.rose_calm)} ${Math.round(st.calmPct)} %</span>` : ""}</div>
       ${st ? `<svg viewBox="0 0 300 300" class="rose">${s}</svg>` : `<div class="empty">${esc(this._loading ? t.loading : t.nodata)}</div>`}
       <div class="legend center small">${legend}${unit}</div>
       <div class="pbtns">${btns}</div>
+      ${c.wind_gust_entity ? `<div class="pbtns"><span class="small muted">${esc(t.rose_by)}</span><button class="pbtn ${!gustMode ? "on" : ""}" data-rmode="wind">${esc(t.wind_mode)}</button><button class="pbtn ${gustMode ? "on gust" : ""}" data-rmode="gust">${esc(t.gust_mode)}</button></div>` : ""}
     </div>`;
   }
 
@@ -1526,6 +2017,14 @@ class ThorWeatherCard extends HTMLElement {
       tileC("ice", "mdi:snowflake-variant", "#1d4ed8", cur?.hasT ? cur.ice : NaN, prev?.hasT ? prev.ice : NaN);
     }
     if (c.rain_total_entity || c.rain_today_entity) tileC("rain", "mdi:weather-pouring", "#3b82f6", cur?.hasR ? cur.rain : NaN, prev?.hasR ? prev.rain : NaN);
+    if (this._radKey() && this._sunHourly?.length) {
+      const sd = [...this._sunDays().values()];
+      const until = new Date(y - 1, now.getMonth(), now.getDate(), 23, 59).getTime();
+      const hy = sd.filter((d) => new Date(d.t).getFullYear() === y).reduce((a, d) => a + d.h, 0);
+      const prevD = sd.filter((d) => new Date(d.t).getFullYear() === y - 1 && d.t <= until);
+      const hp = prevD.length > 200 ? prevD.reduce((a, d) => a + d.h, 0) : NaN;
+      tileC("sun", "mdi:sun-clock", "#f59e0b", Math.round(hy), ok(hp) ? Math.round(hp) : NaN);
+    }
     if (!items.length) return "";
     // Extremwerte
     const ex = [];
@@ -1598,7 +2097,7 @@ class ThorWeatherCard extends HTMLElement {
 /* ---------------------------------------------------------------- Stil */
 
 const STYLE = `
-:host { --thor-accent: #f5a623; --thor-blue: #3b8fd9; --thor-needle: #e8735a; --thor-dial: var(--secondary-text-color); --thor-off: rgba(127,127,127,.18); }
+:host { --thor-accent: #f5a623; --thor-blue: #3b8fd9; --thor-gust: #e8590c; --thor-needle: #e8735a; --thor-dial: var(--secondary-text-color); --thor-off: rgba(127,127,127,.18); }
 ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .head { display:flex; align-items:center; gap:8px; font-size:1.15em; font-weight:500; margin-bottom:6px; }
 .head ha-icon { color: var(--thor-accent); }
@@ -1720,6 +2219,25 @@ ha-card { padding: 12px 14px 14px; overflow: hidden; }
 .grid { stroke: var(--divider-color); stroke-width: .6; }
 .al { font-size: 8.5px; fill: var(--secondary-text-color); dominant-baseline: central; }
 .al.rain { fill: #3b82f6; }
+.c-gust { font-size: 11px; text-anchor: middle; dominant-baseline: central; fill: var(--thor-gust); font-weight: 600; paint-order: stroke; stroke: var(--card-background-color,#fff); stroke-width: 3px; }
+.wbars { display:flex; flex-direction:column; gap:4px; margin: 4px 0 2px; }
+.wbar { display:grid; grid-template-columns: 70px 1fr auto auto; align-items:center; gap:6px; font-size:.82em; }
+.wbar b { font-weight:600; white-space:nowrap; }
+.wtrack { height:8px; border-radius:4px; background: var(--thor-off); overflow:hidden; }
+.wfill { height:100%; border-radius:4px; }
+.wfill.w { background: var(--thor-blue); } .wfill.g { background: var(--thor-gust); }
+.pbtn.on.gust { border-color: var(--thor-gust); color: var(--thor-gust); }
+/* Sonne */
+.sunarc { width:100%; height:auto; display:block; }
+.sunglow { filter: drop-shadow(0 0 5px rgba(251,191,36,.9)); }
+.skins { display:grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap:5px; }
+.skin { display:flex; align-items:center; gap:5px; border:1px solid var(--divider-color); border-radius:8px; padding:4px 6px; font-size:.8em; }
+.skin b { margin-left:auto; font-weight:500; white-space:nowrap; }
+.skin.on { border-color: var(--thor-accent); box-shadow: inset 0 0 0 1px var(--thor-accent); }
+.sk { width:12px; height:12px; border-radius:50%; flex:none; border:1px solid rgba(0,0,0,.15); }
+.sk1 { background:#f9e1d0; } .sk2 { background:#ecc4a1; } .sk3 { background:#d6a37c; } .sk4 { background:#a97850; } .sk5 { background:#7a4f2c; } .sk6 { background:#3f2a1d; }
+.legend i.dash.grey { background: repeating-linear-gradient(90deg, var(--secondary-text-color) 0 4px, transparent 4px 7px); }
+.legend i.dot { background: repeating-linear-gradient(90deg, #f59e0b 0 1px, transparent 1px 4px); height:3px; vertical-align: 2px; }
 /* Klimatage */
 .ctiles { display:grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap:6px; }
 .ctile { border:1px solid var(--divider-color); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:2px; }
@@ -1739,10 +2257,12 @@ const ED = {
       humidity_entity: "Luftfeuchte außen", indoor_humidity_entity: "Luftfeuchte innen", pressure_entity: "Luftdruck (relativ)",
       wind_speed_entity: "Windgeschwindigkeit", wind_gust_entity: "Windböen", wind_direction_entity: "Windrichtung",
       rain_rate_entity: "Regenrate", rain_total_entity: "Regen-Zähler (Gesamt)", rain_today_entity: "Regen heute (täglich zurückgesetzt)", rain_state_entity: "Regen-Status",
-      uv_entity: "UV-Index", radiation_entity: "Sonnenstrahlung / Helligkeit",
+      uv_entity: "UV-Index", radiation_entity: "Sonnenstrahlung (W/m²)", illuminance_entity: "Helligkeit (lx)", sun_entity: "Sonnen-Entität",
+      show_sun_arc: "Sonnenbogen & Tageslänge", show_sun_uv: "UV-Kurve, Dosis & Sonnenbrandzeit", show_radiation: "Strahlung & Sonnenschein", show_sun_chart: "Sonnenstunden je Tag",
+      sun_days: "Tage im Sonnen-Diagramm", skin_type: "Hauttyp", sunshine_threshold: "Sonnenschein ab",
       title: "Titel", icon: "Symbol", show_header: "Kopfzeile", layout: "Layout", default_tab: "Start-Reiter", tabs: "Reiter / Abschnitte", language: "Sprache",
       show_hero: "Übersicht (Jetzt)", show_gauges: "Zeigerinstrumente", show_temps: "Temperatur-Kacheln", show_uv: "UV-Pyramide",
-      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste",
+      show_compass: "Wind-Kompass", show_wind_averages: "Richtungs-Mittel (Stunde/Tag/Monat/Jahr)", show_windrose: "Windrose", show_wind_values: "Windwerte-Liste", show_gust_chart: "Wind & Böen – Verlauf", windrose_mode: "Windrose zeigt",
       show_rain: "Regen-Status & Summen", show_rain_chart: "Regen je Tag", show_climate_days: "Klimatage", show_climate_chart: "Klimadiagramm",
       minmax_mode: "Min/Max-Zeitraum", wind_unit: "Windeinheit", windrose_periods: "Windrosen-Zeiträume", windrose_default: "Windrose Start-Zeitraum",
       rain_days: "Tage im Regen-Diagramm", rain_day_threshold: "Regentag ab", pressure_offset: "Luftdruck-Korrektur",
@@ -1764,10 +2284,16 @@ const ED = {
       pressure_offset: "Wird zum Messwert addiert (z. B. für Höhenkorrektur).",
       image_rotation: "Positiv = im Uhrzeigersinn. Tipp: In Google Maps ist Norden oben – so soll dein Haus liegen.",
       tabs: "Bei „Untereinander“ werden diese Abschnitte nacheinander gezeigt.",
+      radiation_entity: "Globalstrahlung in W/m² – ein Lux-Sensor geht auch (genähert umgerechnet).",
+      illuminance_entity: "Optional, wird zusätzlich angezeigt; ohne Strahlungssensor als Ersatz genutzt.",
+      sunshine_threshold: "WMO: Sonnenschein ab 120 W/m².",
+      skin_type: "Für die Sonnenbrandzeit (Fitzpatrick I–VI).",
     },
-    sections: { temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "UV & Sonne", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
+    sections: { temp: "Temperatur & Luft", wind: "Wind", rain: "Regen", sun: "Sonne & UV", view: "Kopfzeile & Ansicht", parts: "Bereiche", opts: "Optionen", image: "Hausbild (Kompass & Windrose)", advanced: "Erweitert" },
     opts: {
-      tabs: "Reiter", stack: "Untereinander", now: "Jetzt", wind: "Wind", rain: "Regen", year: "Jahr",
+      tabs: "Reiter", stack: "Untereinander", now: "Jetzt", sun: "Sonne", wind: "Wind", rain: "Regen", year: "Jahr",
+      wind_m: "Mittelwind", gust_m: "Böen",
+      skins: ["I – sehr hell", "II – hell", "III – mittel", "IV – oliv", "V – braun", "VI – dunkel"],
       lang_auto: "Automatisch (HA-Sprache)", de: "Deutsch", en: "English", h24: "Letzte 24 Stunden", today: "Seit Mitternacht", auto: "Wie Sensor",
     },
   },
@@ -1777,10 +2303,12 @@ const ED = {
       humidity_entity: "Outdoor humidity", indoor_humidity_entity: "Indoor humidity", pressure_entity: "Pressure (relative)",
       wind_speed_entity: "Wind speed", wind_gust_entity: "Wind gusts", wind_direction_entity: "Wind direction",
       rain_rate_entity: "Rain rate", rain_total_entity: "Rain counter (total)", rain_today_entity: "Rain today (daily reset)", rain_state_entity: "Rain state",
-      uv_entity: "UV index", radiation_entity: "Solar radiation / illuminance",
+      uv_entity: "UV index", radiation_entity: "Solar radiation (W/m²)", illuminance_entity: "Illuminance (lx)", sun_entity: "Sun entity",
+      show_sun_arc: "Sun arc & day length", show_sun_uv: "UV curve, dose & sunburn time", show_radiation: "Radiation & sunshine", show_sun_chart: "Sunshine hours per day",
+      sun_days: "Days in sun chart", skin_type: "Skin type", sunshine_threshold: "Sunshine from",
       title: "Title", icon: "Icon", show_header: "Header", layout: "Layout", default_tab: "Start tab", tabs: "Tabs / sections", language: "Language",
       show_hero: "Overview (now)", show_gauges: "Dial gauges", show_temps: "Temperature tiles", show_uv: "UV pyramid",
-      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list",
+      show_compass: "Wind compass", show_wind_averages: "Direction means (hour/day/month/year)", show_windrose: "Wind rose", show_wind_values: "Wind values list", show_gust_chart: "Wind & gusts – history", windrose_mode: "Wind rose shows",
       show_rain: "Rain state & totals", show_rain_chart: "Rain per day", show_climate_days: "Climate days", show_climate_chart: "Climate chart",
       minmax_mode: "Min/max period", wind_unit: "Wind unit", windrose_periods: "Wind rose periods", windrose_default: "Wind rose start period",
       rain_days: "Days in rain chart", rain_day_threshold: "Rain day from", pressure_offset: "Pressure correction",
@@ -1802,10 +2330,16 @@ const ED = {
       pressure_offset: "Added to the reading (e.g. altitude correction).",
       image_rotation: "Positive = clockwise. Tip: in Google Maps north is up – that is how your house should be aligned.",
       tabs: "With \"stacked\" these sections are shown one after another.",
+      radiation_entity: "Global radiation in W/m² – a lux sensor works too (approximated).",
+      illuminance_entity: "Optional, shown in addition; used as fallback without a radiation sensor.",
+      sunshine_threshold: "WMO: sunshine from 120 W/m².",
+      skin_type: "For the sunburn time (Fitzpatrick I–VI).",
     },
     sections: { temp: "Temperature & air", wind: "Wind", rain: "Rain", sun: "UV & sun", view: "Header & view", parts: "Sections", opts: "Options", image: "House image (compass & wind rose)", advanced: "Advanced" },
     opts: {
-      tabs: "Tabs", stack: "Stacked", now: "Now", wind: "Wind", rain: "Rain", year: "Year",
+      tabs: "Tabs", stack: "Stacked", now: "Now", sun: "Sun", wind: "Wind", rain: "Rain", year: "Year",
+      wind_m: "Mean wind", gust_m: "Gusts",
+      skins: ["I – very fair", "II – fair", "III – medium", "IV – olive", "V – brown", "VI – dark"],
       lang_auto: "Automatic (HA language)", de: "Deutsch", en: "English", h24: "Last 24 hours", today: "Since midnight", auto: "Same as sensor",
     },
   },
@@ -1856,7 +2390,14 @@ class ThorWeatherCardEditor extends HTMLElement {
         grid([{ name: "rain_rate_entity", selector: ent() }, { name: "rain_today_entity", selector: ent() }]),
         { name: "rain_state_entity", selector: { entity: { domain: ["binary_sensor", "sensor"] } } },
       ]),
-      sec("sun", "mdi:sun-wireless", [grid([{ name: "uv_entity", selector: ent() }, { name: "radiation_entity", selector: ent() }])]),
+      sec("sun", "mdi:sun-wireless", [
+        grid([{ name: "uv_entity", selector: ent() }, { name: "radiation_entity", selector: ent() }]),
+        grid([{ name: "illuminance_entity", selector: ent() }, { name: "sun_entity", selector: { entity: { domain: "sun" } } }]),
+        grid([
+          { name: "skin_type", selector: sel(o.skins.map((l, i) => [String(i + 1), l])) },
+          { name: "sunshine_threshold", selector: n(10, 400, 10, "W/m²") },
+        ]),
+      ]),
       sec("view", "mdi:page-layout-header", [
         grid([{ name: "title", selector: { text: {} } }, { name: "icon", selector: { icon: {} } }]),
         grid([
@@ -1873,6 +2414,9 @@ class ThorWeatherCardEditor extends HTMLElement {
           { name: "show_temps", selector: bool }, { name: "show_uv", selector: bool },
           { name: "show_compass", selector: bool }, { name: "show_wind_averages", selector: bool },
           { name: "show_windrose", selector: bool }, { name: "show_wind_values", selector: bool },
+          { name: "show_gust_chart", selector: bool },
+          { name: "show_sun_arc", selector: bool }, { name: "show_sun_uv", selector: bool },
+          { name: "show_radiation", selector: bool }, { name: "show_sun_chart", selector: bool },
           { name: "show_rain", selector: bool }, { name: "show_rain_chart", selector: bool },
           { name: "show_climate_days", selector: bool }, { name: "show_climate_chart", selector: bool },
         ]),
@@ -1885,7 +2429,9 @@ class ThorWeatherCardEditor extends HTMLElement {
         { name: "windrose_periods", selector: sel(periods, true) },
         grid([
           { name: "windrose_default", selector: sel(periods) },
+          { name: "windrose_mode", selector: sel([["wind", o.wind_m], ["gust", o.gust_m]]) },
           { name: "rain_days", selector: n(7, 60, 1, this._l() === ED.de ? "Tage" : "days") },
+          { name: "sun_days", selector: n(7, 60, 1, this._l() === ED.de ? "Tage" : "days") },
           { name: "rain_day_threshold", selector: n(0, 10, 0.1, "mm") },
           { name: "pressure_offset", selector: n(-100, 100, 0.1, "hPa") },
           { name: "temp_gauge_min", selector: n(-60, 20, 1, "°C") },
@@ -1912,7 +2458,7 @@ class ThorWeatherCardEditor extends HTMLElement {
       this.appendChild(this._form);
     }
     this._form.hass = this._hass;
-    this._form.data = { ...DEFAULTS, ...this._config };
+    this._form.data = { ...DEFAULTS, ...this._config, skin_type: String(this._config.skin_type ?? DEFAULTS.skin_type) };
     this._form.schema = this._schema();
   }
 
@@ -1922,6 +2468,7 @@ class ThorWeatherCardEditor extends HTMLElement {
     const out = { type: this._config.type || "custom:thor-weather-card" };
     for (const [k, val] of Object.entries(v)) {
       if (k === "type" || val === undefined || val === null || val === "") continue;
+      if (k === "skin_type") { if (Number(val) !== DEFAULTS.skin_type) out[k] = Number(val); continue; }
       if (JSON.stringify(val) === JSON.stringify(DEFAULTS[k])) continue;
       out[k] = val;
     }

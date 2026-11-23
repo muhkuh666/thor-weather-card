@@ -21,10 +21,19 @@
 - **Gefühlte Temperatur und Taupunkt werden berechnet** (Windchill / Hitzeindex, Magnus-Formel), wenn du dafür keine Sensoren hast
 - **UV-Pyramide** in WHO-Farben mit Risikostufe, Schutz-Tipp und Tagesmaximum
 
+**Sonne**
+- **Sonnenbogen** des Tages mit aktuellem Sonnenstand, Auf- und Untergang, **Tageslänge inkl. Änderung zu gestern**, Sonnenhöchststand mit Höhe, aktuelle Höhe und Azimut (aus dem Standort von Home Assistant berechnet)
+- **UV**: Pyramide plus UV-Kurve des Tages in den WHO-Stufen, **UV-Tagesdosis** (SED) und **Zeit bis zum Sonnenbrand** für Hauttyp I–VI (dein Typ hervorgehoben)
+- **Sonnenstrahlung**: aktuelle W/m², **Klarhimmel-Wert** und **Klarheit** (sonnig / leicht bewölkt / bewölkt / trüb), **Sonnenscheindauer heute** (WMO: ≥ 120 W/m²), **Energie heute** in kWh/m², Tagesmaximum – mit Tagesverlauf gegen die Klarhimmel-Kurve
+- **Sonnenstunden je Tag** (7–60 Tage) und Sonnenstunden des Jahres im Vergleich zum Vorjahr
+- Funktioniert mit Strahlungssensor (W/m²) oder Helligkeitssensor (lx, genähert)
+
 **Wind**
-- Großer Kompass mit Pfeil, Himmelsrichtung, Geschwindigkeit, Beaufort mit Bezeichnung, Böen, **Schwankungsbogen der letzten 10 Minuten** und 10-Minuten-Mittel
+- Großer Kompass mit Pfeil, Himmelsrichtung, Geschwindigkeit, Beaufort mit Bezeichnung, **Schwankungsbogen der letzten 10 Minuten** und 10-Minuten-Mittel
+- **Wind und Böen klar getrennt**: Vergleichsbalken Mittelwind gegen Böen, **Böigkeit** (gleichmäßig … stark böig) mit Böenfaktor, Böen im Kompass und in der Übersicht
+- **Diagramm Wind & Böen (24 h)**: Mittelwind (10-Minuten-Mittel) als Fläche, Böen (10-Minuten-Maximum) als Linie, Beaufort-Achse, Spitzenböe markiert
 - **Richtungsmittel für Stunde, Tag, Monat und Jahr** (Vektormittel – nicht das falsche arithmetische Mittel) plus **Hauptrichtung** und **Beständigkeit**
-- **Windrose** mit 16 Sektoren, gestapelt nach Beaufort-Klassen, Windstille in der Mitte und wählbaren Zeiträumen (1 Stunde … 30 Tage)
+- **Windrose** mit 16 Sektoren, gestapelt nach Beaufort-Klassen, Windstille in der Mitte, wählbaren Zeiträumen (1 Stunde … 30 Tage) und umschaltbar zwischen **Mittelwind und Böen**
 - Optional **Hausbild** hinter Kompass und Windrose – gleiche Optionen wie bei der [Helios Compass Card](https://github.com/muhkuh666/helios-compass-card)
 - Windwerte-Liste: Grad, Beaufort, km/h · m/s · Knoten · mph, Böen, stärkste Böe der letzten 24 h, Durchschnittsgeschwindigkeiten
 - Windeinheit wählbar: wie Sensor, km/h, m/s, kn, mph oder Beaufort
@@ -40,9 +49,15 @@
 - **Klimadiagramm**: Monatsmittel der Temperatur und Niederschlag, dieses Jahr gegen Vorjahr
 
 **Allgemein**
-- Reiter (*Jetzt · Wind · Regen · Jahr*) oder alles untereinander, jeder Bereich abschaltbar
+- Reiter (*Jetzt · Sonne · Wind · Regen · Jahr*) oder alles untereinander, jeder Bereich abschaltbar
 - Komplett im **grafischen Karten-Editor** einstellbar, Deutsch und Englisch, helles & dunkles Theme
 - Klick auf einen Wert öffnet den *Mehr-Infos*-Dialog von Home Assistant
+
+## Screenshots
+
+| Jetzt | Sonne | Wind | Regen | Jahr |
+|---|---|---|---|---|
+| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
 
 ## Installation
 
@@ -86,7 +101,8 @@ rain_rate_entity: sensor.regenrate
 rain_total_entity: sensor.gesamtniederschlag
 rain_state_entity: sensor.regen
 uv_entity: sensor.uv_index
-radiation_entity: sensor.helligkeit
+radiation_entity: sensor.sonnenstrahlung
+skin_type: 2
 layout: tabs            # tabs | stack
 default_tab: now        # now | wind | rain | year
 wind_unit: auto         # auto | km/h | m/s | kn | mph | bft
@@ -115,19 +131,25 @@ image_opacity: 0.55
 | `rain_today_entity` | Täglich zurückgesetzter Regen-Sensor – nur wenn es keinen Gesamt-Zähler gibt |
 | `rain_state_entity` | Optional `binary_sensor` oder Text-Sensor („Regen“/„kein Regen“); sonst zählt Regenrate > 0 |
 | `uv_entity` | UV-Index |
-| `radiation_entity` | Sonnenstrahlung oder Helligkeit (optional, im UV-Bereich angezeigt) |
+| `radiation_entity` | Sonnenstrahlung in W/m² (ein Lux-Sensor geht auch, genähert) |
+| `illuminance_entity` | Helligkeit in lx – optional, zusätzlich angezeigt / als Ersatz |
+| `sun_entity` | `sun.sun` – nur genutzt, wenn Home Assistant keinen Standort hat |
 
 ### Optionen
 
 | Option | Standard | Beschreibung |
 |---|---|---|
 | `layout` | `tabs` | `tabs` (Reiter) oder `stack` (alles untereinander) |
-| `tabs` | `[now, wind, rain, year]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
+| `tabs` | `[now, sun, wind, rain, year]` | Welche Reiter/Abschnitte in welcher Reihenfolge |
 | `default_tab` | `now` | Start-Reiter |
-| `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Einzelne Bereiche ein-/ausblenden |
+| `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Einzelne Bereiche ein-/ausblenden |
 | `minmax_mode` | `24h` | Min/Max über die letzten 24 h oder `today` (seit Mitternacht) |
 | `wind_unit` | `auto` | `auto`, `km/h`, `m/s`, `kn`, `mph`, `bft` |
 | `windrose_periods` | `[1h, 8h, 24h, 14d]` | Beliebig aus `1h 3h 8h 12h 24h 3d 7d 14d 30d` |
+| `windrose_mode` | `wind` | Windrose nach `wind` (Mittelwind) oder `gust` (Böen) |
+| `skin_type` | `2` | Hauttyp I–VI (1–6) für die Sonnenbrandzeit |
+| `sunshine_threshold` | `120` | Ab wie viel W/m² Sonnenschein zählt (WMO) |
+| `sun_days` | `14` | Tage im Sonnenstunden-Diagramm (7–60) |
 | `rain_days` | `14` | Tage im Regen-Diagramm (7–60) |
 | `rain_day_threshold` | `0.1` | Ab wie viel mm ein Tag als Regentag zählt |
 | `pressure_offset` | `0` | hPa, die zum Messwert addiert werden (Höhenkorrektur) |

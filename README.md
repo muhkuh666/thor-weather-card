@@ -21,10 +21,19 @@
 - **Feels-like and dew point are computed** automatically (wind chill / heat index, Magnus formula) if you don't have sensors for them
 - **UV pyramid** in WHO colours with risk level, protection tip and daily maximum
 
+**Sun**
+- **Sun arc** of the day with the current sun position, sunrise, sunset, **day length incl. change vs. yesterday**, solar noon with maximum elevation, elevation and azimuth (computed from your Home Assistant location)
+- **UV**: pyramid plus today's UV curve in the WHO bands, **daily UV dose** (SED) and **time until sunburn** for skin types I–VI (your type highlighted)
+- **Solar radiation**: current W/m², **clear-sky value** and **clearness** (sunny / partly cloudy / cloudy / overcast), **sunshine duration today** (WMO: ≥ 120 W/m²), **energy today** in kWh/m², daily max – with a daily curve against the clear-sky curve
+- **Sunshine hours per day** (7–60 days) and sunshine hours of the year compared with last year
+- Works with a radiation sensor (W/m²) or an illuminance sensor (lx, approximated)
+
 **Wind**
-- Large compass with arrow, cardinal point, speed, Beaufort with description, gusts, the **10‑minute variation arc** and the 10‑minute mean
+- Large compass with arrow, cardinal point, speed, Beaufort with description, the **10‑minute variation arc** and the 10‑minute mean
+- **Wind and gusts clearly separated**: comparison bars mean wind vs. gusts, **gustiness** (steady … very gusty) with gust factor, gusts in the compass and in the overview
+- **Wind & gusts chart (24 h)**: 10‑minute mean wind as area, 10‑minute max gust as line, Beaufort axis, peak gust marked
 - **Direction means for hour, day, month and year** (vector mean, not the wrong arithmetic mean) plus **prevailing direction** and **steadiness**
-- **Wind rose** with 16 sectors stacked by Beaufort class, calm percentage in the centre and selectable periods (1 h … 30 days)
+- **Wind rose** with 16 sectors stacked by Beaufort class, calm percentage in the centre, selectable periods (1 h … 30 days) and switchable between **mean wind and gusts**
 - Optional **house image** behind compass and wind rose – same options as the [Helios Compass Card](https://github.com/muhkuh666/helios-compass-card)
 - Wind values list: degrees, Beaufort, km/h · m/s · knots · mph, gusts, max gust in 24 h, average speeds
 - Wind unit selectable: as sensor, km/h, m/s, kn, mph or Beaufort
@@ -40,9 +49,15 @@
 - **Climate chart**: monthly mean temperature and precipitation, this year vs. last year
 
 **General**
-- Tabs (*Now · Wind · Rain · Year*) or everything stacked, each section can be switched off
+- Tabs (*Now · Sun · Wind · Rain · Year*) or everything stacked, each section can be switched off
 - Fully configurable in the **visual card editor**, German and English, light & dark themes
 - Click any value to open the Home Assistant *more info* dialog
+
+## Screenshots
+
+| Now | Sun | Wind | Rain | Year |
+|---|---|---|---|---|
+| <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/now.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/sun.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/wind.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/rain.png" width="180"> | <img src="https://raw.githubusercontent.com/muhkuh666/thor-weather-card/main/images/year.png" width="180"> |
 
 ## Installation
 
@@ -87,6 +102,7 @@ rain_total_entity: sensor.rain_total
 rain_state_entity: binary_sensor.raining
 uv_entity: sensor.uv_index
 radiation_entity: sensor.solar_radiation
+skin_type: 2
 layout: tabs            # tabs | stack
 default_tab: now        # now | wind | rain | year
 wind_unit: auto         # auto | km/h | m/s | kn | mph | bft
@@ -115,19 +131,25 @@ image_opacity: 0.55
 | `rain_today_entity` | Daily-resetting rain sensor – only if there is no total counter |
 | `rain_state_entity` | Optional `binary_sensor` or text sensor ("rain"/"no rain"); otherwise rain rate > 0 |
 | `uv_entity` | UV index |
-| `radiation_entity` | Solar radiation or illuminance (optional, shown in the UV panel) |
+| `radiation_entity` | Solar radiation in W/m² (a lux sensor also works, approximated) |
+| `illuminance_entity` | Illuminance in lx – optional, shown in addition / fallback |
+| `sun_entity` | `sun.sun` – only used if Home Assistant has no location |
 
 ### Options
 
 | Option | Default | Description |
 |---|---|---|
 | `layout` | `tabs` | `tabs` or `stack` (all sections one after another) |
-| `tabs` | `[now, wind, rain, year]` | Which tabs/sections and in which order |
+| `tabs` | `[now, sun, wind, rain, year]` | Which tabs/sections and in which order |
 | `default_tab` | `now` | Tab shown first |
-| `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Switch individual sections on/off |
+| `show_hero`, `show_gauges`, `show_temps`, `show_uv`, `show_compass`, `show_wind_averages`, `show_windrose`, `show_wind_values`, `show_gust_chart`, `show_sun_arc`, `show_sun_uv`, `show_radiation`, `show_sun_chart`, `show_rain`, `show_rain_chart`, `show_climate_days`, `show_climate_chart` | `true` | Switch individual sections on/off |
 | `minmax_mode` | `24h` | Min/max over the last 24 h or `today` (since midnight) |
 | `wind_unit` | `auto` | `auto`, `km/h`, `m/s`, `kn`, `mph`, `bft` |
 | `windrose_periods` | `[1h, 8h, 24h, 14d]` | Any of `1h 3h 8h 12h 24h 3d 7d 14d 30d` |
+| `windrose_mode` | `wind` | Wind rose by `wind` (mean wind) or `gust` |
+| `skin_type` | `2` | Skin type I–VI (1–6) for the sunburn time |
+| `sunshine_threshold` | `120` | W/m² from which it counts as sunshine (WMO) |
+| `sun_days` | `14` | Days in the sunshine chart (7–60) |
 | `rain_days` | `14` | Days in the rain chart (7–60) |
 | `rain_day_threshold` | `0.1` | mm from which a day counts as a rain day |
 | `pressure_offset` | `0` | hPa added to the reading (altitude correction) |
