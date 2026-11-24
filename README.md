@@ -225,7 +225,7 @@ image_opacity: 0.55
 | `windrose_metric` | `freq` | Wind rose shows `freq` (frequency), `speed` or `bft` (force) |
 | `show_moon_arc` | `true` | Moon in the *Sun & moon* panel |
 | `twilight` | `civil` | Dawn/dusk: `civil` (−6°), `nautical` (−12°), `astronomical` (−18°) |
-| `show_rose_sun`, `show_rose_moon` | `true` | Sun / moon (position and path) on the wind rose |
+| `show_rose_sun`, `show_rose_moon` | `false` | Sun / moon (position and path) on the wind rose |
 | `show_rose_solstices` | `true` | Sun paths of 21 June and 21 December |
 | `show_sky_compass` | `true` | Separate sky compass in the *Sun* tab |
 | `sky_on_compass` | `false` | Sun & moon also on the wind compass |

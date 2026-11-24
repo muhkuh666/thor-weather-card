@@ -4,7 +4,7 @@
  * Wind-Kompass mit Mittelwerten, Windrose, UV-Pyramide, Regen und Klimatage des Jahres.
  * https://github.com/muhkuh666/thor-weather-card
  */
-const CARD_VERSION = "1.11.1";
+const CARD_VERSION = "1.11.2";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -67,8 +67,8 @@ const DEFAULTS = {
   windrose_metric: "freq", // freq | speed | bft
   show_rose_metric_switch: true,
   show_rose_now: true,
-  show_rose_sun: true,
-  show_rose_moon: true,
+  show_rose_sun: false,
+  show_rose_moon: false,
   show_moon_arc: true,
   show_rose_solstices: true,
   sky_on_compass: false,
@@ -3934,7 +3934,7 @@ class ThorWeatherCard extends HTMLElement {
     s += `<circle cx="${cx}" cy="${cy}" r="${r0}" class="calm"/><text x="${cx}" y="${cy + 1}" class="calm-t">${st ? Math.round(st.calmPct) + "%" : "–"}</text>`;
     const dir = this._val("wind_direction_entity");
     const sm = this._sunMoon();
-    s += this._skyOverlay(sm, cx, cy, R);
+    if (c.show_rose_sun || c.show_rose_moon) s += this._skyOverlay(sm, cx, cy, R);
     if (ok(dir)) s += this._arrow(cx, cy, R + 2, dir, "var(--thor-accent)", 8);
 
     const legend = ROSE_CLASSES.map((lo, i) => {

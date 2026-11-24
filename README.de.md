@@ -225,7 +225,7 @@ image_opacity: 0.55
 | `windrose_metric` | `freq` | Windrose zeigt `freq` (Häufigkeit), `speed` (Geschwindigkeit) oder `bft` (Stärke) |
 | `show_moon_arc` | `true` | Mond im Bereich *Sonne & Mond* |
 | `twilight` | `civil` | Dämmerung: `civil` (bürgerlich, −6°), `nautical` (nautisch, −12°), `astronomical` (astronomisch, −18°) |
-| `show_rose_sun`, `show_rose_moon` | `true` | Sonne / Mond (Position und Bahn) auf der Windrose |
+| `show_rose_sun`, `show_rose_moon` | `false` | Sonne / Mond (Position und Bahn) auf der Windrose |
 | `show_rose_solstices` | `true` | Sonnenbahnen am 21.6. und 21.12. |
 | `show_sky_compass` | `true` | Eigener Himmelskompass im Reiter *Sonne* |
 | `sky_on_compass` | `false` | Sonne & Mond auch auf dem Wind-Kompass |
