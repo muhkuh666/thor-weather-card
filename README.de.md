@@ -3,6 +3,7 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
 [![Validate](https://github.com/muhkuh666/thor-weather-card/actions/workflows/validate.yml/badge.svg)](https://github.com/muhkuh666/thor-weather-card/actions/workflows/validate.yml)
 [![GitHub release](https://img.shields.io/github/v/release/muhkuh666/thor-weather-card)](https://github.com/muhkuh666/thor-weather-card/releases)
+[![Downloads](https://img.shields.io/github/downloads/muhkuh666/thor-weather-card/total?label=downloads)](https://github.com/muhkuh666/thor-weather-card/releases)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/muhkuh666)
 
 🇬🇧 [English](README.md)
